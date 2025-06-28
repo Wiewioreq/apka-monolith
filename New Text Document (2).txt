@@ -1,0 +1,681 @@
+// ========== MAIN APP CONTENT ==========
+
+return (
+  <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <View style={styles.mainContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <Feather name="wifi-off" size={18} color="#fff" />
+            <Text style={styles.offlineText}>You are offline. Changes will sync when back online.</Text>
+          </View>
+        )}
+
+        {showDailyConfetti && (
+          <ConfettiCannon
+            count={200}
+            origin={{ x: -10, y: 0 }}
+            fallSpeed={2000}
+            fadeOut={true}
+            autoStart={true}
+          />
+        )}
+        {showWeeklyConfetti && (
+          <ConfettiCannon
+            count={300}
+            origin={{ x: -10, y: 0 }}
+            fallSpeed={2500}
+            fadeOut={true}
+            autoStart={true}
+          />
+        )}
+
+        {/* Header */}
+        <View style={styles.headerContainer}>
+          <View style={styles.headerTop}>
+            <View style={styles.dogInfo}>
+              <TouchableOpacity onPress={openEditDogModal} style={styles.editButton} activeOpacity={0.7}>
+                <Feather name="edit-2" size={16} color="#6b7280" />
+              </TouchableOpacity>
+              <Text style={styles.dogName}>{dogName}</Text>
+              <Text style={styles.dogDetails}>
+                {dogBreed} • {currentDogAge}
+              </Text>
+            </View>
+            <View style={styles.dateTimeContainer}>
+              <Text style={styles.currentDate}>{getCurrentDate()}</Text>
+              <Text style={styles.currentTime}>{getCurrentTime()}</Text>
+            </View>
+          </View>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton} activeOpacity={0.8}>
+            <Feather name="log-out" size={16} color="#ef4444" />
+            <Text style={styles.logoutText}>Switch Family</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Navigation */}
+        <View style={styles.navigationContainer}>
+          {navigationTabs.map(tab => {
+            const IconComponent = tab.iconLib;
+            const isActive = viewMode === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.navTab,
+                  isActive && styles.navTabActive
+                ]}
+                onPress={() => setViewMode(tab.key)}
+                activeOpacity={0.7}
+              >
+                <IconComponent
+                  name={tab.iconName}
+                  size={22}
+                  color={isActive ? "#ffffff" : "#64748b"}
+                />
+                {isActive && (
+                  <View style={{
+                    position: 'absolute',
+                    bottom: 2,
+                    width: 4,
+                    height: 4,
+                    borderRadius: 2,
+                    backgroundColor: '#ffffff'
+                  }} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Main content by viewMode */}
+        {viewMode === "daily" && (
+          <View>
+            <View style={styles.progressContainer}>
+              <View style={styles.progressHeader}>
+                <Feather name="sun" size={22} color="#f59e42" />
+                <Text style={styles.progressTitle}>Today's Progress</Text>
+              </View>
+              <View style={styles.progressStats}>
+                <ProgressRing progress={dailyRate} size={80} />
+              </View>
+            </View>
+            {/* Enhanced Time Slot Rendering */}
+            {Object.entries(dailyRoutine).map(([timeSlot, acts]) => {
+              const colors = timeSlotColors[timeSlot] || timeSlotColors.morning;
+              return (
+                <View 
+                  key={timeSlot} 
+                  style={[
+                    styles.timeSlotContainer,
+                    { 
+                      backgroundColor: colors.backgroundColor,
+                      borderLeftColor: colors.borderColor,
+                      borderWidth: 1,
+                      borderColor: colors.borderColor + '40'
+                    }
+                  ]}
+                >
+                  <Text style={[styles.timeSlotTitle, { color: colors.textColor }]}>
+                    <Feather name="clock" size={16} color={colors.iconColor} />{" "}
+                    {timeSlot === "play"
+                      ? "Play & Bonding"
+                      : `${timeSlot.charAt(0).toUpperCase() + timeSlot.slice(1)} Routine`}
+                  </Text>
+                  {acts.map((activity, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[
+                        styles.activityRow,
+                        { backgroundColor: completedToday.includes(`daily-${timeSlot}-${activity}`) ? colors.borderColor + '20' : '#ffffff' }
+                      ]}
+                      onPress={() => toggleDailyActivity(timeSlot, activity)}
+                      activeOpacity={0.8}
+                    >
+                      {completedToday.includes(`daily-${timeSlot}-${activity}`) ? (
+                        <MaterialCommunityIcons 
+                          name="checkbox-marked-circle" 
+                          color={colors.iconColor} 
+                          size={22} 
+                        />
+                      ) : (
+                        <MaterialCommunityIcons 
+                          name="checkbox-blank-circle-outline" 
+                          color="#9ca3af" 
+                          size={22} 
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.activityText,
+                          { color: colors.textColor },
+                          completedToday.includes(`daily-${timeSlot}-${activity}`) &&
+                            styles.activityCompleted
+                        ]}
+                      >
+                        {activity}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              );
+            })}
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                <Feather name="star" size={18} color="#eab308" /> Week {currentWeek} Focus
+              </Text>
+              {(weeklyPlans[currentWeek] || []).map((activity, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={styles.activityRow}
+                  onPress={() => toggleActivity(currentWeek, activity)}
+                  activeOpacity={0.8}
+                >
+                  {completedActivities.includes(`${currentWeek}-${activity}`) ? (
+                    <MaterialCommunityIcons name="checkbox-marked-circle" color="#22c55e" size={20} />
+                  ) : (
+                    <MaterialCommunityIcons name="checkbox-blank-circle-outline" color="#9ca3af" size={20} />
+                  )}
+                  <Text
+                    style={[
+                      styles.activityText,
+                      completedActivities.includes(`${currentWeek}-${activity}`) &&
+                        styles.activityCompleted
+                    ]}
+                  >
+                    {activity}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                <Feather name="book-open" size={18} /> Today's Notes
+              </Text>
+              <TextInput
+                style={styles.noteInput}
+                placeholder="Add a note about today's training..."
+                value={dailyNotes[selectedDate] || ""}
+                onChangeText={text => addNote(selectedDate, text)}
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <SmartTips 
+              dogBreed={dogBreed} 
+              currentWeek={currentWeek} 
+              completionRate={completionRate}
+              recentActivities={completedActivities}
+            />
+
+            <StreakCounter currentStreak={currentStreak} bestStreak={bestStreak} />
+          </View>
+        )}
+
+        {viewMode === "weekly" && (
+          <View style={styles.section}>
+            <View style={styles.weekNavigation}>
+              <TouchableOpacity
+                onPress={() => setCurrentWeek(w => Math.max(1, w - 1))}
+                disabled={currentWeek === 1}
+                style={[styles.weekNavButton, currentWeek === 1 && styles.weekNavDisabled]}
+                activeOpacity={0.7}
+              >
+                <Feather name="chevron-left" size={22} color="#2563eb" />
+                <Text style={styles.weekNav}>Previous Week</Text>
+              </TouchableOpacity>
+              <Text style={styles.weekTitle}>Week {currentWeek}</Text>
+              <TouchableOpacity
+                onPress={() => setCurrentWeek(w => Math.min(MAX_WEEKS, w + 1))}
+                disabled={currentWeek === MAX_WEEKS}
+                style={[styles.weekNavButton, currentWeek === MAX_WEEKS && styles.weekNavDisabled]}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.weekNav}>Next Week</Text>
+                <Feather name="chevron-right" size={22} color="#2563eb" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Enhanced Stage Indicator */}
+            <View 
+              style={[
+                styles.stageIndicator, 
+                { 
+                  backgroundColor: trainingStages[currentStage]?.color || "#f3f4f6",
+                  borderColor: trainingStages[currentStage]?.borderColor || "#d1d5db",
+                  borderWidth: 2
+                }
+              ]}
+            >
+              <Text 
+                style={[
+                  styles.stageText,
+                  { color: trainingStages[currentStage]?.textColor || "#374151" }
+                ]}
+              >
+                🎯 {trainingStages[currentStage]?.name} • {trainingStages[currentStage]?.range}
+              </Text>
+            </View>
+
+            <View style={styles.progressContainer}>
+              <View style={styles.progressHeader}>
+                <Feather name="target" size={22} color="#10b981" />
+                <Text style={styles.progressTitle}>Week {currentWeek} Progress</Text>
+              </View>
+              <View style={styles.progressStats}>
+                <ProgressRing progress={completionRate} size={80} />
+              </View>
+            </View>
+
+            <Text style={styles.sectionTitle}>
+              <Feather name="check-circle" size={18} /> This Week's Goals
+            </Text>
+            {(weeklyPlans[currentWeek] || []).map((activity, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={styles.activityRow}
+                onPress={() => toggleActivity(currentWeek, activity)}
+                activeOpacity={0.8}
+              >
+                {completedActivities.includes(`${currentWeek}-${activity}`) ? (
+                  <MaterialCommunityIcons name="checkbox-marked-circle" color="#22c55e" size={20} />
+                ) : (
+                  <MaterialCommunityIcons name="checkbox-blank-circle-outline" color="#9ca3af" size={20} />
+                )}
+                <Text
+                  style={[
+                    styles.activityText,
+                    completedActivities.includes(`${currentWeek}-${activity}`) &&
+                      styles.activityCompleted
+                  ]}
+                >
+                  {activity}
+                </Text>
+              </TouchableOpacity>
+            ))}
+
+            <PhotoProgress 
+              week={currentWeek} 
+              photos={progressPhotos} 
+              onPhotoAdded={handlePhotoAdded}
+            />
+          </View>
+        )}
+
+        {viewMode === "progress" && (
+          <View>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                <Feather name="trending-up" size={18} /> Training Overview
+              </Text>
+              <View style={styles.overviewStats}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{currentWeek}</Text>
+                  <Text style={styles.statLabel}>Current Week</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{Math.round(completionRate * 100)}%</Text>
+                  <Text style={styles.statLabel}>Week Progress</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{Math.round(dailyRate * 100)}%</Text>
+                  <Text style={styles.statLabel}>Today's Tasks</Text>
+                </View>
+              </View>
+            </View>
+
+            <TrainingCalendar 
+              completedDailyByDate={completedDailyByDate} 
+              onDateSelect={setSelectedDate} 
+              selectedDate={selectedDate}
+            />
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                <Feather name="calendar" size={18} /> Weekly History
+              </Text>
+              {[...Array(Math.min(currentWeek, MAX_WEEKS))].map((_, i) => {
+                const week = i + 1;
+                const weekActivities = weeklyPlans[week] || [];
+                const weekCompleted = weekActivities.filter(act =>
+                  completedActivities.includes(`${week}-${act}`)
+                ).length;
+                const weekRate = weekActivities.length > 0 ? weekCompleted / weekActivities.length : 0;
+                
+                return (
+                  <View key={week} style={styles.weekHistoryItem}>
+                    <Text style={styles.weekHistoryTitle}>Week {week}</Text>
+                    <View style={styles.progressBarContainer}>
+                      <View
+                        style={[
+                          styles.progressBar,
+                          { width: `${weekRate * 100}%` }
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.weekHistoryPercent}>
+                      {Math.round(weekRate * 100)}%
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {viewMode === "achievements" && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              <Feather name="award" size={18} /> Achievements
+            </Text>
+            <View style={styles.achievementsGrid}>
+              {achievements.map(achievement => (
+                <AchievementBadge 
+                  key={achievement.id}
+                  achievement={achievement}
+                  unlocked={unlockedAchievements.includes(achievement.id)}
+                />
+              ))}
+            </View>
+            
+            <StreakCounter currentStreak={currentStreak} bestStreak={bestStreak} />
+            
+            <View style={styles.achievementStats}>
+              <Text style={styles.achievementStatsTitle}>Your Progress</Text>
+              <Text style={styles.achievementStatsText}>
+                {unlockedAchievements.length} of {achievements.length} achievements unlocked
+              </Text>
+              <View style={styles.progressBarContainer}>
+                <View
+                  style={[
+                    styles.progressBar,
+                    { width: `${(unlockedAchievements.length / achievements.length) * 100}%` }
+                  ]}
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
+        {viewMode === "family" && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              <Feather name="users" size={18} /> Family Members
+            </Text>
+            {family.map(member => (
+              <View key={member.id} style={styles.familyMemberRow}>
+                {editingMemberId === member.id ? (
+                  <View style={styles.familyEditContainer}>
+                    <TextInput
+                      style={styles.familyEditInput}
+                      value={editFamilyName[member.id] || ""}
+                      onChangeText={text =>
+                        setEditFamilyName({ ...editFamilyName, [member.id]: text })
+                      }
+                      onBlur={() => handleSaveFamilyMember(member.id, editFamilyName[member.id])}
+                      autoFocus
+                    />
+                    <TouchableOpacity
+                      onPress={() => handleSaveFamilyMember(member.id, editFamilyName[member.id])}
+                      style={styles.familyActionButton}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="check" size={16} color="#22c55e" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={styles.familyMemberName}>{member.name}</Text>
+                    <View style={styles.familyActions}>
+                      <TouchableOpacity
+                        onPress={() => handleEditFamilyMember(member.id)}
+                        style={styles.familyActionButton}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="edit-2" size={16} color="#6b7280" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleRemoveFamilyMember(member.id)}
+                        style={styles.familyActionButton}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="trash-2" size={16} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+            ))}
+            
+            <View style={styles.addFamilyContainer}>
+              <TextInput
+                style={styles.addFamilyInput}
+                placeholder="Add family member..."
+                value={newFamilyName}
+                onChangeText={setNewFamilyName}
+                onSubmitEditing={handleAddFamilyMember}
+              />
+              <TouchableOpacity onPress={handleAddFamilyMember} style={styles.addFamilyButton} activeOpacity={0.8}>
+                <Feather name="plus" size={16} color="#2563eb" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {viewMode === "notes" && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              <Feather name="message-circle" size={18} /> Shared Notes
+            </Text>
+            
+            <View style={styles.addNoteContainer}>
+              <TextInput
+                style={styles.addNoteInput}
+                placeholder="Share a training note..."
+                value={newSharedNote}
+                onChangeText={setNewSharedNote}
+                multiline
+                numberOfLines={2}
+              />
+              <TouchableOpacity onPress={handleAddSharedNote} style={styles.addNoteButton} activeOpacity={0.8}>
+                <Feather name="send" size={16} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {notesLoading ? (
+              <ActivityIndicator size="small" color="#2563eb" style={styles.notesLoader} />
+            ) : (
+              <View style={styles.notesContainer}>
+                {sharedNotes && sharedNotes.length > 0 ? (
+                  sharedNotes.map(note => (
+                    <View key={note.id} style={styles.noteItem}>
+                      <View style={styles.noteHeader}>
+                        <Text style={styles.noteAuthor}>{note.author}</Text>
+                        <Text style={styles.noteTimestamp}>
+                          {new Date(note.timestamp).toLocaleDateString()} {new Date(note.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                      
+                      {editingNoteId === note.id ? (
+                        <View style={styles.noteEditContainer}>
+                          <TextInput
+                            style={styles.noteEditInput}
+                            value={editingNoteText}
+                            onChangeText={setEditingNoteText}
+                            multiline
+                            autoFocus
+                          />
+                          <View style={styles.noteEditActions}>
+                            <TouchableOpacity
+                              onPress={() => saveNoteEdit(note.id)}
+                              style={styles.noteEditButton}
+                              activeOpacity={0.7}
+                            >
+                              <Feather name="check" size={14} color="#22c55e" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => {
+                                setEditingNoteId(null);
+                                setEditingNoteText("");
+                              }}
+                              style={styles.noteEditButton}
+                              activeOpacity={0.7}
+                            >
+                              <Feather name="x" size={14} color="#ef4444" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : (
+                        <>
+                          <Text style={styles.noteText}>{note.text}</Text>
+                          {note.edited && (
+                            <Text style={styles.noteEdited}>
+                              Edited {new Date(note.editTimestamp).toLocaleDateString()}
+                            </Text>
+                          )}
+                          
+                          {note.authorId === currentUserName && (
+                            <TouchableOpacity
+                              onPress={() => {
+                                setEditingNoteId(note.id);
+                                setEditingNoteText(note.text);
+                              }}
+                              style={styles.noteEditIcon}
+                              activeOpacity={0.7}
+                            >
+                              <Feather name="edit-2" size={12} color="#6b7280" />
+                            </TouchableOpacity>
+                          )}
+                        </>
+                      )}
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.noNotesText}>No shared notes yet. Add one above!</Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Quick Actions Floating Button */}
+      <QuickActions 
+        onAddNote={handleQuickAddNote}
+        onTakePhoto={handleQuickTakePhoto}
+        onMarkComplete={handleQuickMarkComplete}
+      />
+
+      {/* Sync indicator */}
+      {syncing && (
+        <View style={styles.syncIndicator}>
+          <ActivityIndicator size="small" color="#fff" />
+          <Text style={styles.syncText}>Syncing...</Text>
+        </View>
+      )}
+    </View>
+
+    {/* Dog edit modal */}
+    <Modal visible={editDogModal} animationType="slide" presentationStyle="pageSheet">
+      <SafeAreaView style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={() => setEditDogModal(false)}>
+            <Feather name="x" size={24} color="#6b7280" />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Edit Dog Info</Text>
+          <TouchableOpacity onPress={saveDogInfo}>
+            <Text style={styles.modalSave}>Save</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.modalContent}>
+          <View style={styles.modalSection}>
+            <Text style={styles.modalLabel}>Dog Name</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editDogName}
+              onChangeText={setEditDogName}
+              placeholder="Dog Name"
+            />
+          </View>
+          <View style={styles.modalSection}>
+            <Text style={styles.modalLabel}>Breed</Text>
+            <RNPickerSelect
+              onValueChange={value => setEditDogBreed(value)}
+              value={editDogBreed}
+              placeholder={{ label: "Select Dog Breed...", value: "" }}
+              items={[
+                ...commonUKBreeds.map(breed => ({ label: breed, value: breed })),
+                { label: "Other", value: "Other" }
+              ]}
+              style={{
+                inputIOS: styles.modalPickerInput,
+                inputAndroid: styles.modalPickerInput
+              }}
+            />
+            {editDogBreed === "Other" && (
+              <TextInput
+                style={[styles.modalInput, styles.modalInputMarginTop]}
+                value={editDogBreedOther}
+                onChangeText={setEditDogBreedOther}
+                placeholder="Specify breed"
+              />
+            )}
+          </View>
+          <View style={styles.modalSection}>
+            <Text style={styles.modalLabel}>Date of Birth (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editDogDob}
+              onChangeText={setEditDogDob}
+              placeholder="YYYY-MM-DD"
+              keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"}
+              maxLength={10}
+            />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+
+    {/* Quick Note Modal */}
+    <Modal visible={showQuickNote} animationType="slide" transparent={true}>
+      <View style={styles.quickNoteOverlay}>
+        <View style={styles.quickNoteModal}>
+          <View style={styles.quickNoteHeader}>
+            <Text style={styles.quickNoteTitle}>Quick Note</Text>
+            <TouchableOpacity onPress={() => setShowQuickNote(false)}>
+              <Feather name="x" size={20} color="#6b7280" />
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={styles.quickNoteInput}
+            placeholder="Add a quick training note..."
+            value={quickNoteText}
+            onChangeText={setQuickNoteText}
+            multiline
+            numberOfLines={4}
+            autoFocus
+          />
+          <View style={styles.quickNoteActions}>
+            <TouchableOpacity 
+              style={styles.quickNoteCancel}
+              onPress={() => setShowQuickNote(false)}
+            >
+              <Text style={styles.quickNoteCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.quickNoteSave}
+              onPress={handleQuickNoteSubmit}
+            >
+              <Text style={styles.quickNoteSaveText}>Save Note</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  </SafeAreaView>
+);
+}
+

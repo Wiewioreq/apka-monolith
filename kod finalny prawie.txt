@@ -30,9 +30,6 @@ import Svg, { Circle, Path } from "react-native-svg";
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
 
-
-
-
 // ========== DOG TRAINING THEMED COLORS PALETTE ==========
 const dogThemeColors = {
   primary: "#8B4513",           // Saddle Brown - warm and earthy
@@ -517,6 +514,7 @@ const showToast = (message, type = "info") => {
   Alert.alert(titles[type], message, [{ text: "Got it!" }]);
 };
 
+// NEW FUNCTION: Convert image to base64
 const imageToBase64 = async (uri) => {
   try {
     const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
@@ -529,11 +527,13 @@ const imageToBase64 = async (uri) => {
 
 // ========== COMPONENTS ==========
 
+// Enhanced Progress Ring Component with Dog Theme
 const ProgressRing = ({ progress, size = 100, strokeWidth = 8 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const strokeDashoffset = circumference - progress * circumference;
 
+  // Create color based on progress with dog theme
   const getColor = () => {
     if (progress < 0.3) return dogThemeColors.warning;
     if (progress < 0.7) return dogThemeColors.secondary;
@@ -592,6 +592,7 @@ const ProgressRing = ({ progress, size = 100, strokeWidth = 8 }) => {
   );
 };
 
+// Enhanced Streak Counter Component with Dog Theme
 const StreakCounter = ({ currentStreak, bestStreak }) => {
   return (
     <View style={styles.streakContainer}>
@@ -611,6 +612,7 @@ const StreakCounter = ({ currentStreak, bestStreak }) => {
   );
 };
 
+// Dog Avatar Component with Theme - UPDATED
 const DogAvatar = ({ dogName, dogBreed }) => {
   const getBreedEmoji = (breed) => {
     if (!breed) return "🐶";
@@ -645,7 +647,7 @@ const DogAvatar = ({ dogName, dogBreed }) => {
     </View>
   );
 };
-
+// Enhanced Training Calendar Component with Dog Theme
 const TrainingCalendar = ({
   completedDailyByDate,
   onDateSelect,
@@ -683,6 +685,7 @@ const TrainingCalendar = ({
     return date.toISOString().slice(0, 10);
   };
 
+  // Double-click logic
   const lastClickRef = useRef({});
   const DOUBLE_CLICK_DELAY = 350;
 
@@ -694,9 +697,11 @@ const TrainingCalendar = ({
       lastClickRef.current[dateStr] &&
       now - lastClickRef.current[dateStr] < DOUBLE_CLICK_DELAY
     ) {
+      // Double click
       onOpenNoteModal(dateStr, calendarNotes?.[dateStr]?.text || "");
       lastClickRef.current[dateStr] = 0;
     } else {
+      // Single click: toggle note view if exists, or just select
       if (calendarNotes?.[dateStr]?.text) {
         setVisibleNotes((prev) => ({
           ...prev,
@@ -772,6 +777,7 @@ const TrainingCalendar = ({
               {hasNote && (
                 <Text style={{ position: "absolute", top: 2, right: 2, fontSize: 8 }}>📝</Text>
               )}
+              {/* Show note popup if toggled */}
               {visibleNotes?.[dateStr] && hasNote && (
                 <View style={styles.notePopup}>
                   <Text style={styles.notePopupText}>{calendarNotes[dateStr]?.text}</Text>
@@ -785,45 +791,20 @@ const TrainingCalendar = ({
   );
 };
 
+// Enhanced Smart Tips Component with Dog Theme
 const SmartTips = ({ dogBreed, currentWeek, completionRate, recentActivities }) => {
   const generateTips = () => {
     const tips = [];
 
-    if (dogBreed) {
-      let breedTipsToUse = null;
-      
-      if (breedTips[dogBreed]) {
-        breedTipsToUse = breedTips[dogBreed];
-      } else {
-        const cleanBreed = dogBreed.replace(/^[🐕🐕‍🦺🌭💪\\u{1F400}-\\u{1F9FF}]\\s*/u, "").trim();
-        
-        const matchingKey = Object.keys(breedTips).find(key => 
-          key.toLowerCase().includes(cleanBreed.toLowerCase()) ||
-          cleanBreed.toLowerCase().includes(key.replace(/^[🐕🐕‍🦺🌭💪\\u{1F400}-\\u{1F9FF}]\\s*/u, "").toLowerCase())
-        );
-        
-        if (matchingKey) {
-          breedTipsToUse = breedTips[matchingKey];
-        }
-      }
-      
-      if (breedTipsToUse && breedTipsToUse.length > 0) {
-        const cleanBreedName = dogBreed.replace(/^[🐕🐕‍🦺🌭💪\\u{1F400}-\\u{1F9FF}]\\s*/u, "").trim();
-        tips.push({
-          type: "breed",
-          icon: "🐕",
-          title: `${cleanBreedName} Training Tip`,
-          content: breedTipsToUse[Math.floor(Math.random() * breedTipsToUse.length)],
-        });
-      }
-    }
-
-    if (currentWeek >= 17 && breedTips["Advanced Training"]) {
+    // Remove emoji from breed for lookup
+    const cleanBreed = dogBreed?.replace(/^[🐕🐕‍🦺🌭💪]\s*/, "");
+    
+    if (cleanBreed && breedTips[dogBreed]) {
       tips.push({
-        type: "advanced",
-        icon: "🎯",
-        title: "Advanced Training Tip",
-        content: breedTips["Advanced Training"][Math.floor(Math.random() * breedTips["Advanced Training"].length)],
+        type: "breed",
+        icon: "🐕",
+        title: `${cleanBreed} Training Tip`,
+        content: breedTips[dogBreed][Math.floor(Math.random() * breedTips[dogBreed].length)],
       });
     }
 
@@ -856,6 +837,7 @@ const SmartTips = ({ dogBreed, currentWeek, completionRate, recentActivities }) 
   };
 
   const tips = generateTips();
+
   return (
     <View style={styles.tipsContainer}>
       <Text style={styles.tipsHeader}>💡 Pawsome Training Tips</Text>
@@ -872,7 +854,8 @@ const SmartTips = ({ dogBreed, currentWeek, completionRate, recentActivities }) 
   );
 };
 
-const PhotoProgress = ({ week, photos, onPhotoAdded, onPhotoPress }) => {
+// Enhanced Photo Progress Component with Dog Theme
+const PhotoProgress = ({ week, photos, onPhotoAdded }) => {
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
@@ -930,14 +913,12 @@ const PhotoProgress = ({ week, photos, onPhotoAdded, onPhotoPress }) => {
             : { uri: photo.uri };
             
           return (
-            <TouchableOpacity key={index} onPress={() => onPhotoPress(photo)} activeOpacity={0.8}>
-              <View style={styles.photoWrapper}>
-                <Image source={source} style={styles.photo} />
-                <Text style={styles.photoDate}>
-                  {new Date(photo.timestamp).toLocaleDateString()}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            <View key={index} style={styles.photoWrapper}>
+              <Image source={source} style={styles.photo} />
+              <Text style={styles.photoDate}>
+                {new Date(photo.timestamp).toLocaleDateString()}
+              </Text>
+            </View>
           );
         })}
       </View>
@@ -945,6 +926,7 @@ const PhotoProgress = ({ week, photos, onPhotoAdded, onPhotoPress }) => {
   );
 };
 
+// Enhanced Quick Actions Component with Dog Theme
 const QuickActions = ({ onAddNote, onTakePhoto, onMarkComplete }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [animation] = useState(new Animated.Value(0));
@@ -1049,6 +1031,7 @@ const QuickActions = ({ onAddNote, onTakePhoto, onMarkComplete }) => {
   );
 };
 
+// Enhanced Achievement Badge Component with Dog Theme
 const AchievementBadge = ({ achievement, unlocked }) => (
   <View style={[styles.achievementBadge, unlocked && styles.achievementUnlocked]}>
     <Text style={{ fontSize: 36, marginBottom: 8 }}>{achievement.icon}</Text>
@@ -1131,7 +1114,6 @@ function MainApp() {
   const [editDogBreed, setEditDogBreed] = useState("");
   const [editDogDob, setEditDogDob] = useState("");
   const [editDogBreedOther, setEditDogBreedOther] = useState("");
-  const [isSavingDogInfo, setIsSavingDogInfo] = useState(false);
 
   // App data states
   const [currentWeek, setCurrentWeek] = useState(1);
@@ -1181,11 +1163,7 @@ function MainApp() {
   const lastSyncedData = useRef({});
   const dobInputRef = useRef(null);
 
-  const [celebratedWeeks, setCelebratedWeeks] = useState([]);
-  const [celebratedDays, setCelebratedDays] = useState([]);
-
-  const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
-
+  // ========== UPDATED NAVIGATION TABS WITH COMPLETE DOG TRAINING THEME ==========
   const navigationTabs = [
     { key: "daily", iconLib: "custom", iconName: "home", CustomIcon: DogHouseIcon, label: "🏠 Home" },
     { key: "weekly", iconLib: "custom", iconName: "calendar", CustomIcon: CalendarPawIcon, label: "📅 Weekly" },
@@ -1195,6 +1173,7 @@ function MainApp() {
     { key: "family", iconLib: "custom", iconName: "family", CustomIcon: DogFamilyIcon, label: "👨‍👩‍👧‍👦 Pack" }
   ];
 
+  // Auto-delete notes for previous days
   useEffect(() => {
     const today = getCurrentDate();
     let changed = false;
@@ -1213,12 +1192,14 @@ function MainApp() {
     }
   }, [calendarNotes, familyId]);
 
+  // Modal open handler
   const handleOpenNoteModal = useCallback((date, text = "") => {
     setCurrentNoteDate(date);
     setNoteInputText(text);
     setShowNoteModal(true);
   }, []);
 
+  // Modal save handler
   const handleSaveNote = async () => {
     if (noteInputText.trim()) {
       const newNotes = {
@@ -1240,6 +1221,7 @@ function MainApp() {
     Keyboard.dismiss();
   };
 
+  // Setup notifications with dog theme
   useEffect(() => {
     const setupNotifications = async () => {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -1279,6 +1261,7 @@ function MainApp() {
     }
   }, [dogName]);
 
+  // Network status effect
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       setIsOffline(!state.isConnected);
@@ -1287,6 +1270,7 @@ function MainApp() {
     return () => unsubscribe();
   }, []);
 
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (syncTimeout.current) {
@@ -1295,6 +1279,7 @@ function MainApp() {
     };
   }, []);
 
+  // Initial data loading with dog theme
   useEffect(() => {
     (async () => {
       try {
@@ -1304,9 +1289,7 @@ function MainApp() {
         const dob = await AsyncStorage.getItem("dogDob");
         const username = await AsyncStorage.getItem("memberName");
         const photos = await AsyncStorage.getItem("progressPhotos");
-        const unlocked = await AsyncStorage.getItem("unlockedAchievements");
-        const celebratedW = await AsyncStorage.getItem("celebratedWeeks");
-        const celebratedD = await AsyncStorage.getItem("celebratedDays");
+        const achievements = await AsyncStorage.getItem("unlockedAchievements");
 
         if (id) setFamilyId(id);
         if (dog) setDogName(dog);
@@ -1314,9 +1297,7 @@ function MainApp() {
         if (dob) setDogDob(dob);
         if (username) setCurrentUserName(username);
         if (photos) setProgressPhotos(JSON.parse(photos));
-        if (unlocked) setUnlockedAchievements(JSON.parse(unlocked));
-        if (celebratedW) setCelebratedWeeks(JSON.parse(celebratedW));
-        if (celebratedD) setCelebratedDays(JSON.parse(celebratedD));
+        if (achievements) setUnlockedAchievements(JSON.parse(achievements));
       } catch (e) {
         console.error("Error loading app data:", e);
       }
@@ -1335,12 +1316,14 @@ function MainApp() {
     })();
   }, []);
 
+  // Set current user name in AsyncStorage when it changes
   useEffect(() => {
     if (currentUserName) {
       AsyncStorage.setItem("memberName", currentUserName);
     }
   }, [currentUserName]);
 
+  // Save photos and achievements to AsyncStorage
   useEffect(() => {
     AsyncStorage.setItem("progressPhotos", JSON.stringify(progressPhotos));
   }, [progressPhotos]);
@@ -1349,14 +1332,7 @@ function MainApp() {
     AsyncStorage.setItem("unlockedAchievements", JSON.stringify(unlockedAchievements));
   }, [unlockedAchievements]);
 
-  useEffect(() => {
-    AsyncStorage.setItem("celebratedWeeks", JSON.stringify(celebratedWeeks));
-  }, [celebratedWeeks]);
-
-  useEffect(() => {
-    AsyncStorage.setItem("celebratedDays", JSON.stringify(celebratedDays));
-  }, [celebratedDays]);
-
+  // New manual sync function with dog theme
   const forceSyncToFirebase = useCallback(async () => {
     if (!familyId) {
       showToast("🏠 No family pack set", "error");
@@ -1385,10 +1361,12 @@ function MainApp() {
       await db.collection("families").doc(familyId).set(dataToSync, { merge: true });
       lastSyncedData.current = { ...dataToSync };
       
+      // Also fetch the latest data
       const docSnap = await db.collection("families").doc(familyId).get();
       if (docSnap.exists) {
         const data = docSnap.data();
         
+        // Update with the latest data from Firestore
         if (data.currentWeek !== undefined) setCurrentWeek(data.currentWeek);
         if (data.completedActivities) setCompletedActivities(data.completedActivities);
         if (data.dailyNotes) setDailyNotes(data.dailyNotes);
@@ -1405,6 +1383,7 @@ function MainApp() {
 
       showToast("🔄 Pack data synced successfully!", "success");
       
+      // Save to AsyncStorage
       await AsyncStorage.setItem("completedDailyByDate", JSON.stringify(completedDailyByDate));
     } catch (e) {
       console.error("Failed to force sync:", e);
@@ -1429,6 +1408,7 @@ function MainApp() {
     calendarNotes
   ]);
 
+  // Optimized Firebase sync with deep comparison and dog theme
   const syncToFirebase = useCallback(
     async (data) => {
       if (!familyId || !data) return;
@@ -1456,6 +1436,7 @@ function MainApp() {
     [familyId, isOffline, manualSyncRequested]
   );
 
+  // Consolidated debounced sync effect
   useEffect(() => {
     if (loading || !familyId) return;
 
@@ -1503,6 +1484,7 @@ function MainApp() {
     manualSyncRequested,
   ]);
 
+// Firebase snapshot listener with optimized updates and dog theme
 useEffect(() => {
   if (!familyId) return;
 
@@ -1602,6 +1584,7 @@ useEffect(() => {
   return unsubscribe;
 }, [familyId]);
 
+  // Dog age calculation effect
   useEffect(() => {
     if (!dogDob) return;
     const interval = setInterval(() => {
@@ -1611,39 +1594,59 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, [dogDob]);
 
+  // Achievement checking effect with dog theme celebrations
   useEffect(() => {
-    if (loading) return; 
-
     const checkAchievements = () => {
-      const newlyUnlocked = [];
+      const newAchievements = [];
       const { currentStreak } = calculateStreak(completedDailyByDate);
 
-      const check = (id, condition) => {
-        if (condition && !unlockedAchievements.includes(id)) {
-          newlyUnlocked.push(id);
-        }
-      };
+      // Check for new achievements
+      if (currentWeek >= 1 && !unlockedAchievements.includes("first_week")) {
+        newAchievements.push("first_week");
+      }
 
-      check("first_week", currentWeek >= 1);
-      check("streak_7", currentStreak >= 7);
-      check("streak_30", currentStreak >= 30);
-      check("photo_first", progressPhotos.length > 0);
+      if (currentStreak >= 7 && !unlockedAchievements.includes("streak_7")) {
+        newAchievements.push("streak_7");
+      }
 
-      const today = getCurrentDate();
+      if (currentStreak >= 30 && !unlockedAchievements.includes("streak_30")) {
+        newAchievements.push("streak_30");
+      }
+
+      if (progressPhotos.length > 0 && !unlockedAchievements.includes("photo_first")) {
+        newAchievements.push("photo_first");
+      }
+
+      // Check daily completion
+      const today = new Date().toISOString().slice(0, 10);
       const completedToday = completedDailyByDate[today] || [];
       const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
         acts.map((activity) => `daily-${slot}-${activity}`)
       );
-      check("all_daily", completedToday.length >= allDailyKeys.length);
-      
-      const currentWeekActivities = weeklyPlans[currentWeek] || [];
-      const isWeekComplete = currentWeekActivities.length > 0 && currentWeekActivities.every(act => completedActivities.includes(`${currentWeek}-${act}`));
-      check("week_perfect", isWeekComplete);
 
-      if (newlyUnlocked.length > 0) {
-        setUnlockedAchievements(prev => [...prev, ...newlyUnlocked]);
-        newlyUnlocked.forEach(id => {
-          const achievement = achievements.find(a => a.id === id);
+      if (completedToday.length >= allDailyKeys.length && !unlockedAchievements.includes("all_daily")) {
+        newAchievements.push("all_daily");
+      }
+
+      // Check week perfect completion
+      const currentWeekActivities = weeklyPlans[currentWeek] || [];
+      const weekCompleted = currentWeekActivities.filter((act) =>
+        completedActivities.includes(`${currentWeek}-${act}`)
+      );
+
+      if (
+        weekCompleted.length === currentWeekActivities.length &&
+        currentWeekActivities.length > 0 &&
+        !unlockedAchievements.includes("week_perfect")
+      ) {
+        newAchievements.push("week_perfect");
+      }
+
+      // Add new achievements with dog theme celebration
+      if (newAchievements.length > 0) {
+        setUnlockedAchievements((prev) => [...prev, ...newAchievements]);
+        newAchievements.forEach((achievementId) => {
+          const achievement = achievements.find((a) => a.id === achievementId);
           if (achievement) {
             showToast(`🏆 Achievement Unlocked: ${achievement.title} 🐕`, "success");
           }
@@ -1652,10 +1655,11 @@ useEffect(() => {
     };
 
     checkAchievements();
-  }, [currentWeek, completedActivities, completedDailyByDate, progressPhotos, unlockedAchievements, loading]);
+  }, [currentWeek, completedActivities, completedDailyByDate, progressPhotos, unlockedAchievements]);
 
   // HANDLER FUNCTIONS
 
+  // Family ID submission with theme
   const handleFamilyIdSubmit = async () => {
     if (!inputId.trim()) return;
     setCheckingFamilyId(true);
@@ -1706,6 +1710,7 @@ useEffect(() => {
     }
   };
 
+  // Dog details submission with theme
   const handleDogDetailsSubmit = async () => {
     const breedToSave = inputBreed === "Other" ? inputBreedOther.trim() : inputBreed;
 
@@ -1761,6 +1766,7 @@ useEffect(() => {
     }
   };
 
+  // Activity toggle with celebration
   const toggleActivity = useCallback((week, activity) => {
     const key = `${week}-${activity}`;
     const wasCompleted = completedActivities.includes(key);
@@ -1774,37 +1780,32 @@ useEffect(() => {
     }
   }, [completedActivities]);
 
-const toggleDailyActivity = useCallback((timeSlot, activity) => {
-  const key = `daily-${timeSlot}-${activity}`;
-  const today = getCurrentDate();
+  // Daily activity toggle with celebration
+  const toggleDailyActivity = useCallback((timeSlot, activity) => {
+    const key = `daily-${timeSlot}-${activity}`;
+    const today = getCurrentDate();
 
-  setCompletedDailyByDate((prev) => {
-    const prevForToday = prev[today] || [];
-    const isCompleted = prevForToday.includes(key);
-    const newCompletedToday = isCompleted 
-      ? prevForToday.filter((k) => k !== key) 
-      : [...prevForToday, key];
+    setCompletedDailyByDate((prev) => {
+      const prevForToday = prev[today] || [];
+      const isCompleted = prevForToday.includes(key);
+      const newCompletedToday = isCompleted 
+        ? prevForToday.filter((k) => k !== key) 
+        : [...prevForToday, key];
 
-    if (!isCompleted) {
-      const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
-        acts.map((activity) => `daily-${slot}-${activity}`)
-      );
-      
-      const wasFullyCompleted = prevForToday.length >= allDailyKeys.length;
-      const isNowFullyCompleted = newCompletedToday.length >= allDailyKeys.length;
-
-      if (isNowFullyCompleted && !wasFullyCompleted) {
-        showToast("🎉 Pawsome! All daily training completed! Your pup earned extra treats! 🦴", "success");
+      // Show celebration for daily completion
+      if (!isCompleted) {
+        const emoji = timeSlotColors[timeSlot]?.emoji || "🎉";
+        showToast(`${emoji} Pawsome! Completed: ${activity}`, "success");
       }
-    }
 
-    return {
-      ...prev,
-      [today]: newCompletedToday,
-    };
-  });
-}, []);
+      return {
+        ...prev,
+        [today]: newCompletedToday,
+      };
+    });
+  }, []);
 
+  // Notes handling with dog theme
   const addNote = useCallback(
     async (date, note) => {
       const updatedNotes = { ...dailyNotes, [date]: note };
@@ -1882,6 +1883,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
     }
   };
 
+  // Family member management with dog theme
   const handleEditFamilyMember = useCallback(
     (id) => {
       setEditingMemberId(id);
@@ -1927,78 +1929,67 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
     showToast("🎉 New pack member added!", "success");
   }, [newFamilyName]);
 
+  // Dog editing modal with proper error handling
   const openEditDogModal = useCallback(() => {
-  try {
-    const currentName = dogName || "";
-    let currentBreed = "";
-    let currentBreedOther = "";
+    try {
+      const currentName = dogName || "";
+      let currentBreed = dogBreed || "";
+      let currentBreedOther = "";
 
-    if (dogBreed) {
-      const isCommonBreed = commonUKBreeds.some(breed => breed === dogBreed);
-      
-      if (isCommonBreed) {
-        currentBreed = dogBreed;
-      } else {
-        currentBreed = "Other";
-        currentBreedOther = dogBreed.replace(/^[🐕🐕‍🦺🌭💪\\u{1F400}-\\u{1F9FF}]\\s*/u, "").trim();
+      if (dogBreed) {
+        if (commonUKBreeds.includes(dogBreed)) {
+          currentBreed = dogBreed;
+        } else {
+          currentBreed = "Other";
+          currentBreedOther = dogBreed.replace(/^[🐕🐕‍🦺🌭💪]\s*/, ""); // Remove emoji prefix
+        }
       }
+
+      const currentDob = dogDob || "";
+
+      setEditDogName(currentName);
+      setEditDogBreed(currentBreed || "");
+      setEditDogBreedOther(currentBreedOther);
+      setEditDogDob(currentDob);
+      setEditDogModal(true);
+    } catch (e) {
+      console.error("Error opening dog edit modal:", e);
+      Alert.alert("🐕 Oops!", "Could not open the edit form. Please try again.");
     }
-
-    const currentDob = dogDob || "";
-
-    setEditDogName(currentName);
-    setEditDogBreed(currentBreed);
-    setEditDogBreedOther(currentBreedOther);
-    setEditDogDob(currentDob);
-    setEditDogModal(true);
-  } catch (e) {
-    console.error("Error opening dog edit modal:", e);
-    Alert.alert("🐕 Oops!", "Could not open the edit form. Please try again.");
-  }
-}, [dogName, dogBreed, dogDob]);
+  }, [dogName, dogBreed, dogDob]);
 
   const saveDogInfo = async () => {
-    if (isSavingDogInfo) return; 
-    setIsSavingDogInfo(true);
+    const name = editDogName?.trim() || "";
+    const dob = editDogDob?.trim() || "";
+    const breedOther = editDogBreedOther?.trim() || "";
+
+    let breedToSave = editDogBreed === "Other" ? breedOther : editDogBreed;
+
+    if (!name || !breedToSave || !dob) {
+      Alert.alert("🐕 Missing Info", "All fields are required for your pup!");
+      return;
+    }
+
+    if (editDogBreed === "Other" && !breedOther) {
+      Alert.alert("🐕‍🦺 Breed Required", "Please specify your pup's breed.");
+      return;
+    }
+
+    if (!isValidDate(dob)) {
+      Alert.alert("🎂 Invalid Date", "Please enter a valid birthday in YYYY-MM-DD format.");
+      return;
+    }
 
     try {
-      const name = (editDogName || "").trim();
-      const dob = (editDogDob || "").trim();
-      const breedOther = (editDogBreedOther || "").trim();
-
-      let breedToSave = editDogBreed === "Other" ? breedOther : editDogBreed;
-
-      if (!name || !breedToSave || !dob) {
-        Alert.alert("🐕 Missing Info", "All fields are required for your pup!");
-        setIsSavingDogInfo(false);
-        return;
-      }
-
-      if (editDogBreed === "Other" && !breedOther) {
-        Alert.alert("🐕‍🦺 Breed Required", "Please specify your pup's breed.");
-        setIsSavingDogInfo(false);
-        return;
-      }
-
-      if (!isValidDate(dob)) {
-        Alert.alert("🎂 Invalid Date", "Please enter a valid birthday in YYYY-MM-DD format.");
-        setIsSavingDogInfo(false);
-        return;
-      }
-
-      await updateDogInfoStorageAndFirestore(familyId, name, breedToSave, dob);
-
       setDogName(name);
       setDogBreed(breedToSave);
       setDogDob(dob);
 
+      await updateDogInfoStorageAndFirestore(familyId, name, breedToSave, dob);
       setEditDogModal(false);
       showToast("🐕 Pup info updated successfully!", "success");
     } catch (e) {
-      console.error("Error saving dog info:", e, { name: editDogName, breed: editDogBreed, dob: editDogDob });
-      Alert.alert("🌐 Connection Issue", "Failed to save changes. Please try again.");
-    } finally {
-      setIsSavingDogInfo(false);
+      Alert.alert("🌐 Connection Issue", e.message);
     }
   };
 
@@ -2036,19 +2027,13 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
     );
   };
 
+  // Photo handlers with celebration
   const handlePhotoAdded = useCallback((newPhoto) => {
     setProgressPhotos((prev) => [...prev, newPhoto]);
     showToast("📸 Amazing progress photo! Your pup is growing! 🐕", "success");
   }, []);
 
-  const handlePhotoPress = (photo) => {
-    setFullScreenPhoto(photo);
-  };
-
-  const handleCloseFullScreen = () => {
-    setFullScreenPhoto(null);
-  };
-
+  // Quick action handlers with dog theme
   const handleQuickAddNote = () => {
     setShowQuickNote(true);
   };
@@ -2105,6 +2090,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
     }
   };
 
+  // Quick note modal handler with celebration
   const handleQuickNoteSubmit = async () => {
     if (!quickNoteText.trim()) return;
 
@@ -2114,6 +2100,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
     showToast("📝 Training note added! Great job keeping track! 🐕", "success");
   };
 
+  // Calculate all the stats with dog theme messaging
   const today = getCurrentDate();
   const completedToday = completedDailyByDate[today] || [];
   const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
@@ -2133,31 +2120,28 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
   const currentStage = getCurrentStage(currentWeek);
   const { currentStreak, bestStreak } = calculateStreak(completedDailyByDate);
 
+  // Confetti effects with dog theme celebration
   useEffect(() => {
-    const today = getCurrentDate();
-    if (dailyRate === 1 && !celebratedDays.includes(today)) {
+    if (dailyRate === 1 && !showDailyConfetti) {
       setShowDailyConfetti(true);
-      setCelebratedDays(prev => [...prev, today]);
       showToast("🎉 Daily training complete! Your pup earned extra treats! 🦴", "success");
       setTimeout(() => setShowDailyConfetti(false), 3500);
     }
-  }, [dailyRate, celebratedDays]);
+  }, [dailyRate, showDailyConfetti]);
 
   useEffect(() => {
     const currentWeekActivities = weeklyPlans[currentWeek] || [];
     const allDone = currentWeekActivities.every((act) =>
       completedActivities.includes(`${currentWeek}-${act}`)
     );
-    const weekKey = `week-${currentWeek}`;
-    
-    if (allDone && currentWeekActivities.length > 0 && !celebratedWeeks.includes(weekKey)) {
+    if (allDone && !showWeeklyConfetti && currentWeekActivities.length > 0) {
       setShowWeeklyConfetti(true);
-      setCelebratedWeeks(prev => [...prev, weekKey]);
       showToast("🏆 Week complete! Your pup is ready for the next challenge! 🐕‍🦺", "success");
       setTimeout(() => setShowWeeklyConfetti(false), 3500);
     }
-  }, [currentWeek, completedActivities, celebratedWeeks]);
+  }, [currentWeek, completedActivities, showWeeklyConfetti]);
 
+  // Loading states with dog theme
   if (familyDogLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -2168,6 +2152,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
     );
   }
 
+  // Setup screens with dog theme
   if (!familyId || !dogName || !dogBreed || !dogDob) {
     if (!showDogInput) {
       return (
@@ -2265,6 +2250,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
             <ConfettiCannon count={300} origin={{ x: -10, y: 0 }} fallSpeed={2500} fadeOut autoStart />
           )}
 
+          {/* ENHANCED Header with complete dog theme */}
           <View style={styles.enhancedHeaderContainer}>
             <View style={styles.headerTop}>
               <View style={styles.dogInfoContainer}>
@@ -2301,6 +2287,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
             </View>
           </View>
 
+          {/* Enhanced Navigation with Dog Theme */}
           <View style={styles.enhancedNavigationContainer}>
             {navigationTabs.map((tab) => {
               const isActive = viewMode === tab.key;
@@ -2344,6 +2331,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
             })}
           </View>
 
+          {/* Main content by viewMode with Dog Theme */}
           {viewMode === "daily" && (
             <View>
               <View style={styles.enhancedProgressContainer}>
@@ -2356,6 +2344,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
                 </View>
               </View>
 
+              {/* Enhanced Time Slot Rendering with Dog Theme */}
               {Object.entries(dailyRoutine).map(([timeSlot, acts]) => {
                 const colors = timeSlotColors[timeSlot] || timeSlotColors.morning;
                 return (
@@ -2444,29 +2433,30 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
           {viewMode === "weekly" && (
             <View style={styles.enhancedSection}>
              <View style={styles.weekNavigation}>
-                <TouchableOpacity
-                  onPress={() => setCurrentWeek((w) => Math.max(1, w - 1))}
-                  disabled={currentWeek === 1}
-                  style={[styles.weekNavButton, currentWeek === 1 && styles.weekNavDisabled]}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.weekNavText}>⬅️ Prev</Text>
-                </TouchableOpacity>
-                
-                <View style={styles.weekTitleContainer}>
-                  <Text style={styles.weekTitle}>Week {currentWeek}</Text>
-                </View>
-                
-                <TouchableOpacity
-                  onPress={() => setCurrentWeek((w) => Math.min(MAX_WEEKS, w + 1))}
-                  disabled={currentWeek === MAX_WEEKS}
-                  style={[styles.weekNavButton, currentWeek === MAX_WEEKS && styles.weekNavDisabled]}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.weekNavText}>Next ➡️</Text>
-                </TouchableOpacity>
-              </View>
+  <TouchableOpacity
+    onPress={() => setCurrentWeek((w) => Math.max(1, w - 1))}
+    disabled={currentWeek === 1}
+    style={[styles.weekNavButton, currentWeek === 1 && styles.weekNavDisabled]}
+    activeOpacity={0.7}
+  >
+    <Text style={styles.weekNavText}>⬅️ Prev</Text>
+  </TouchableOpacity>
+  
+  <View style={styles.weekTitleContainer}>
+    <Text style={styles.weekTitle}>Week {currentWeek}</Text>
+  </View>
+  
+  <TouchableOpacity
+    onPress={() => setCurrentWeek((w) => Math.min(MAX_WEEKS, w + 1))}
+    disabled={currentWeek === MAX_WEEKS}
+    style={[styles.weekNavButton, currentWeek === MAX_WEEKS && styles.weekNavDisabled]}
+    activeOpacity={0.7}
+  >
+    <Text style={styles.weekNavText}>Next ➡️</Text>
+  </TouchableOpacity>
+</View>
 
+              {/* Enhanced Stage Indicator with Dog Theme */}
               <View
                 style={[
                   styles.enhancedStageIndicator,
@@ -2515,7 +2505,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
                 </TouchableOpacity>
               ))}
 
-              <PhotoProgress week={currentWeek} photos={progressPhotos} onPhotoAdded={handlePhotoAdded} onPhotoPress={handlePhotoPress} />
+              <PhotoProgress week={currentWeek} photos={progressPhotos} onPhotoAdded={handlePhotoAdded} />
             </View>
           )}
 
@@ -2790,8 +2780,10 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
           )}
         </ScrollView>
 
+        {/* Quick Actions Floating Button with Dog Theme */}
         <QuickActions onAddNote={handleQuickAddNote} onTakePhoto={handleQuickTakePhoto} onMarkComplete={handleQuickMarkComplete} />
 
+        {/* Sync indicator with Dog Theme */}
         {syncing && (
           <View style={styles.syncIndicator}>
             <Text style={{ fontSize: 16, marginRight: 6 }}>🔄</Text>
@@ -2800,6 +2792,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
         )}
       </View>
 
+      {/* Dog edit modal with theme */}
       <Modal visible={editDogModal} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={styles.enhancedModalContainer}>
           <View style={styles.enhancedModalHeader}>
@@ -2807,7 +2800,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
               <Text style={{ fontSize: 20 }}>❌</Text>
             </TouchableOpacity>
             <Text style={styles.enhancedModalTitle}>🐕 Edit Pup Info</Text>
-            <TouchableOpacity onPress={saveDogInfo} disabled={isSavingDogInfo}>
+            <TouchableOpacity onPress={saveDogInfo}>
               <Text style={styles.enhancedModalSave}>💾 Save</Text>
             </TouchableOpacity>
           </View>
@@ -2860,6 +2853,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
         </SafeAreaView>
       </Modal>
 
+      {/* Quick Note Modal with Dog Theme */}
       <Modal visible={showQuickNote} animationType="slide" transparent={true}>
         <View style={styles.quickNoteOverlay}>
           <View style={styles.enhancedQuickNoteModal}>
@@ -2890,6 +2884,7 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
         </View>
       </Modal>
 
+      {/* Calendar Note Modal with Dog Theme */}
       <Modal visible={showNoteModal} transparent animationType="fade">
         <View style={styles.noteModalOverlay}>
           <View style={styles.noteModalContainer}>
@@ -2920,22 +2915,6 @@ const toggleDailyActivity = useCallback((timeSlot, activity) => {
           </View>
         </View>
       </Modal>
-
-      <Modal visible={!!fullScreenPhoto} transparent={true} animationType="fade">
-        <SafeAreaView style={styles.fullScreenOverlay}>
-          <TouchableOpacity style={styles.fullScreenCloseButton} onPress={handleCloseFullScreen}>
-            <Text style={styles.fullScreenCloseText}>❌</Text>
-          </TouchableOpacity>
-          {fullScreenPhoto && (
-            <Image
-              source={{ uri: fullScreenPhoto.base64 ? `data:image/${fullScreenPhoto.type || 'jpeg'};base64,${fullScreenPhoto.base64}` : fullScreenPhoto.uri }}
-              style={styles.fullScreenImage}
-              resizeMode="contain"
-            />
-          )}
-        </SafeAreaView>
-      </Modal>
-
     </SafeAreaView>
   );
 }
@@ -2964,6 +2943,7 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 100,
   },
+  // Enhanced header container with dog theme
   enhancedHeaderContainer: {
     marginBottom: 20,
     backgroundColor: dogThemeColors.cardBg,
@@ -3078,6 +3058,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
+  // Enhanced navigation container with dog theme
   enhancedNavigationContainer: {
     backgroundColor: dogThemeColors.cardBg,
     borderRadius: 16,
@@ -3123,6 +3104,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: dogThemeColors.accent,
   },
+  // Enhanced progress container with dog theme
   enhancedProgressContainer: {
     backgroundColor: dogThemeColors.cardBg,
     borderRadius: 16,
@@ -3153,6 +3135,7 @@ const styles = StyleSheet.create({
   progressStats: {
     alignItems: "center",
   },
+  // Enhanced section with dog theme
   enhancedSection: {
     backgroundColor: dogThemeColors.cardBg,
     borderRadius: 16,
@@ -3175,6 +3158,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: dogThemeColors.lightAccent,
   },
+  // Enhanced time slot container with dog theme
   enhancedTimeSlotContainer: {
     borderRadius: 16,
     padding: 16,
@@ -3194,6 +3178,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 0.5,
   },
+  // Enhanced activity row with dog theme
   enhancedActivityRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -3220,6 +3205,7 @@ const styles = StyleSheet.create({
     color: dogThemeColors.mediumText,
     opacity: 0.7,
   },
+  // Enhanced stage indicator with dog theme
   enhancedStageIndicator: {
     padding: 18,
     borderRadius: 16,
@@ -3242,6 +3228,361 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 8,
   },
+  // Enhanced stat card with dog theme
+  enhancedStatCard: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: dogThemeColors.lightAccent,
+    padding: 20,
+    borderRadius: 16,
+    marginHorizontal: 6,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  enhancedStatNumber: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: dogThemeColors.primary,
+    letterSpacing: 0.5,
+  },
+  enhancedStatLabel: {
+    fontSize: 13,
+    color: dogThemeColors.mediumText,
+    marginTop: 6,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  streakContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    shadowColor: dogThemeColors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  streakItem: {
+    alignItems: "center",
+    backgroundColor: dogThemeColors.lightAccent,
+    padding: 16,
+    borderRadius: 16,
+    minWidth: 120,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  streakNumber: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: dogThemeColors.primary,
+    marginTop: 8,
+  },
+  streakLabel: {
+    fontSize: 14,
+    color: dogThemeColors.primary,
+    marginTop: 6,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  streakSubLabel: {
+    fontSize: 11,
+    color: dogThemeColors.mediumText,
+    marginTop: 2,
+    textAlign: "center",
+  },
+  calendar: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  calendarTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  calendarSubtitle: {
+    fontSize: 14,
+    color: dogThemeColors.mediumText,
+    marginBottom: 16,
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+  weekDays: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 8,
+  },
+  weekDayText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: dogThemeColors.mediumText,
+    width: 32,
+    textAlign: "center",
+  },
+  daysGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  dayCell: {
+    width: "14.28%",
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 10,
+    marginVertical: 2,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+    position: "relative",
+  },
+  completedDay: {
+    backgroundColor: dogThemeColors.success,
+    shadowColor: dogThemeColors.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+    borderColor: dogThemeColors.success,
+  },
+  selectedDay: {
+    backgroundColor: dogThemeColors.primary,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+    borderColor: dogThemeColors.primary,
+  },
+  noteDay: {
+    backgroundColor: dogThemeColors.warning,
+    borderColor: dogThemeColors.warning,
+  },
+  dayText: {
+    fontSize: 14,
+    color: dogThemeColors.darkText,
+  },
+  completedDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  selectedDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  noteDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  notePopup: {
+    position: "absolute",
+    top: 38,
+    left: 0,
+    right: 0,
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 8,
+    padding: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.warning,
+    zIndex: 99,
+    minWidth: 120,
+    minHeight: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+  },
+  notePopupText: {
+    color: dogThemeColors.darkText,
+    fontSize: 12,
+    textAlign: "center",
+  },
+  tipsContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+      borderColor: dogThemeColors.lightAccent,
+  },
+  navTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+    borderRadius: 12,
+    marginHorizontal: 1,
+  },
+  navTabText: {
+    fontSize: 9,
+    fontWeight: "600",
+    marginTop: 2,
+    textAlign: "center",
+  },
+  enhancedNavTabActive: {
+    backgroundColor: dogThemeColors.primary,
+    shadowColor: dogThemeColors.secondary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  activeTabIndicator: {
+    position: "absolute",
+    bottom: 0,
+    left: "25%",
+    right: "25%",
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: dogThemeColors.accent,
+  },
+  // Enhanced progress container with dog theme
+  enhancedProgressContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.success,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: dogThemeColors.lightAccent,
+  },
+  progressTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    letterSpacing: 0.5,
+  },
+  progressStats: {
+    alignItems: "center",
+  },
+  // Enhanced section with dog theme
+  enhancedSection: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  enhancedSectionTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: dogThemeColors.lightAccent,
+  },
+  // Enhanced time slot container with dog theme
+  enhancedTimeSlotContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 6,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  timeSlotTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  // Enhanced activity row with dog theme
+  enhancedActivityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginVertical: 4,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  activityText: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    flex: 1,
+    fontWeight: "500",
+  },
+  activityCompleted: {
+    textDecorationLine: "line-through",
+    color: dogThemeColors.mediumText,
+    opacity: 0.7,
+  },
+  // Enhanced stage indicator with dog theme
+  enhancedStageIndicator: {
+    padding: 18,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 3,
+  },
+  enhancedStageText: {
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+    letterSpacing: 0.3,
+  },
+  overviewStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  // Enhanced stat card with dog theme
   enhancedStatCard: {
     flex: 1,
     alignItems: "center",
@@ -4312,27 +4653,5 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: dogThemeColors.darkText,
     textAlign: "center",
-  },
-  fullScreenOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fullScreenImage: {
-    width: '100%',
-    height: '100%',
-  },
-  fullScreenCloseButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 1,
-    padding: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 20,
-  },
-  fullScreenCloseText: {
-    fontSize: 24,
   },
 });

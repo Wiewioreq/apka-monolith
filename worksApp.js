@@ -1,0 +1,3072 @@
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { View, ScrollView, StyleSheet, Text, TouchableOpacity, TextInput, Alert, ActivityIndicator, Platform, Modal, Image, Animated } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import ConfettiCannon from "react-native-confetti-cannon";
+import NetInfo from "@react-native-community/netinfo";
+import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
+import RNPickerSelect from "react-native-picker-select";
+import * as Notifications from 'expo-notifications';
+import * as ImagePicker from 'expo-image-picker';
+import Svg, { Circle } from 'react-native-svg';
+import firebase from "firebase/compat/app";
+import "firebase/compat/firestore";
+
+// ========== FIREBASE CONFIG ==========
+const firebaseConfig = {
+  apiKey: "AIzaSyDPT2FZbLupAd9F_V1CB87i5CUl2oaULLg",
+  authDomain: "ludos-training-tracker.firebaseapp.com",
+  projectId: "ludos-training-tracker",
+  storageBucket: "ludos-training-tracker.appspot.com",
+  messagingSenderId: "599255592851",
+  appId: "1:599255592851:android:5c758bc134326f9b40c266"
+};
+
+let db;
+
+try {
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+
+  db = firebase.firestore();
+
+  if (Platform.OS === 'android' || Platform.OS === 'ios') {
+    db.enablePersistence({ synchronizeTabs: false }).catch(function (err) {
+      console.warn("Firestore persistence not available:", err.code);
+    });
+  }
+} catch (error) {
+  console.error("Firebase initialization failed:", error);
+}
+
+// ========== CONSTANTS & HELPERS ==========
+const APP_VERSION = "2.0.0";
+const BUILD_DATE = "2025-06-10";
+const getCurrentDate = () => new Date().toISOString().slice(0, 10);
+const getCurrentTime = () => new Date().toTimeString().slice(0, 8);
+
+const commonUKBreeds = [
+  "Labrador Retriever", "Cocker Spaniel", "French Bulldog", "Bulldog", "Dachshund",
+  "German Shepherd", "Jack Russell Terrier", "Staffordshire Bull Terrier", 
+  "Border Collie", "Golden Retriever"
+];
+
+const breedTips = {
+  "Labrador Retriever": [
+    "Labradors love water – include swimming in their routine.",
+    "They respond well to food rewards but watch their weight.",
+    "Labs are natural retrievers - use fetch games for training."
+  ],
+  "Cocker Spaniel": [
+    "Spaniels are energetic and need regular, varied exercise.",
+    "Mental stimulation is crucial for this clever breed.",
+    "Use their hunting instincts with hide-and-seek games."
+  ],
+  "French Bulldog": [
+    "Short walks suit their breathing; avoid heat.",
+    "They thrive on companionship and gentle training.",
+    "Focus on indoor activities during hot weather."
+  ],
+  "Bulldog": [
+    "Keep sessions short and allow rest breaks.",
+    "Monitor for overheating, especially in warm weather.",
+    "Use positive reinforcement with patience."
+  ],
+  "Dachshund": [
+    "Protect their back: avoid stairs and jumping.",
+    "Short, positive training sessions work best.",
+    "Use ramps instead of stairs to protect their spine."
+  ],
+  "German Shepherd": [
+    "GSDs need jobs: try agility or advanced obedience.",
+    "Early and ongoing socialisation is key.",
+    "Challenge their intelligence with complex tasks."
+  ],
+  "Jack Russell Terrier": [
+    "Channel their energy into games and puzzles.",
+    "Consistent boundaries are essential.",
+    "Provide plenty of mental stimulation daily."
+  ],
+  "Staffordshire Bull Terrier": [
+    "They excel with positive reinforcement.",
+    "Plenty of social play helps prevent boredom.",
+    "Focus on building confidence through training."
+  ],
+  "Border Collie": [
+    "They thrive on advanced tricks and mental work.",
+    "Provide daily tasks to keep them busy.",
+    "Border Collies need both physical and mental exercise."
+  ],
+  "Golden Retriever": [
+    "Retrievers love to carry and fetch – use this in games.",
+    "Social, gentle training is most effective.",
+    "They excel in group training environments."
+  ]
+};
+
+const trainingStages = {
+  1: { 
+    name: "Foundation (Weeks 1-4)", 
+    range: "8-12 weeks", 
+    color: "#dcfce7",
+    borderColor: "#16a34a",
+    textColor: "#14532d"
+  },
+  2: { 
+    name: "Impulse Control (Weeks 5-16)", 
+    range: "12-16 weeks", 
+    color: "#dbeafe",
+    borderColor: "#2563eb",
+    textColor: "#1e3a8a"
+  },
+  3: { 
+    name: "Building Obedience (Weeks 17-26)", 
+    range: "4-6 months", 
+    color: "#f3e8ff",
+    borderColor: "#9333ea",
+    textColor: "#581c87"
+  },
+  4: { 
+    name: "Adolescent Phase (Weeks 27+)", 
+    range: "6-12 months", 
+    color: "#fed7aa",
+    borderColor: "#ea580c",
+    textColor: "#9a3412"
+  }
+};
+
+const timeSlotColors = {
+  morning: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#f59e0b",
+    iconColor: "#d97706",
+    textColor: "#92400e"
+  },
+  midday: {
+    backgroundColor: "#dbeafe",
+    borderColor: "#3b82f6",
+    iconColor: "#2563eb",
+    textColor: "#1d4ed8"
+  },
+  evening: {
+    backgroundColor: "#e0e7ff",
+    borderColor: "#6366f1",
+    iconColor: "#4f46e5",
+    textColor: "#3730a3"
+  },
+  play: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#10b981",
+    iconColor: "#059669",
+    textColor: "#047857"
+  }
+};
+
+const weeklyPlans = {
+  1: ["Name recognition", "Crate training", "Potty training"],
+  2: ["Sit & Down", "Handling paws/ears/mouth", "Intro to leash"],
+  3: ["Meet calm dogs", "New surfaces & sounds", "Short training sessions"],
+  4: ["Basic recall (indoors)", "Continue potty/crate", "Social walk (carry if needed)"],
+  5: ["Wait & Leave it", "Loose-leash walking", "Puzzle toy intro"],
+  6: ["Sit-Stay & Down-Stay", "Recall indoors", "Traffic & bike exposure"],
+  7: ["Tug with drop-it", "Find-it game", "New sounds/social areas"],
+  8: ["Reinforce all basics", "Puzzle time", "Crate review"],
+  9: ["Recall w/ distractions", "Advanced stays", "Marker word training"],
+  10: ["Place command", "Puzzle toy advanced", "Spin trick"],
+  11: ["Scent games", "Shake trick", "Review leash & crate"],
+  12: ["Bow trick", "New distractions", "Clicker practice"],
+  13: ["Mix tricks: combo day", "Trail walk intro", "Social calm practice"],
+  14: ["Stays with duration", "Heel in quiet area", "Slow feeder puzzle"],
+  15: ["Clicker games", "Play with purpose", "Place & Stay combo"],
+  16: ["Dog-friendly cafe visit", "New location recall", "Tug with control"]
+};
+
+const dailyRoutine = {
+  morning: ["Potty break", "Breakfast", "Basic commands review"],
+  midday: ["Primary training focus", "Socialization/Exposure", "Mental stimulation"],
+  evening: ["Recall practice", "Command reinforcement", "Cool down"],
+  play: ["Structured play", "Bonding time", "Free play"]
+};
+
+const achievements = [
+  { id: 'first_week', title: 'First Week Complete!', description: 'Completed your first week of training', icon: 'star' },
+  { id: 'streak_7', title: 'Week Warrior', description: '7 days in a row', icon: 'zap' },
+  { id: 'streak_30', title: 'Monthly Master', description: '30 days in a row', icon: 'award' },
+  { id: 'all_daily', title: 'Daily Champion', description: 'Completed all daily tasks', icon: 'check-circle' },
+  { id: 'photo_first', title: 'Picture Perfect', description: 'Added your first progress photo', icon: 'camera' },
+  { id: 'week_perfect', title: 'Perfect Week', description: 'Completed all activities in a week', icon: 'target' }
+];
+
+const MAX_WEEKS = 16;
+
+// ========== UTILITY FUNCTIONS ==========
+const getCurrentStage = week => {
+  if (week <= 4) return 1;
+  if (week <= 16) return 2;
+  if (week <= 26) return 3;
+  return 4;
+};
+
+const isValidDate = (dateString) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
+  const date = new Date(dateString + 'T00:00:00.000Z');
+  return !isNaN(date) && dateString === date.toISOString().slice(0, 10);
+};
+
+const deepEqual = (obj1, obj2) => {
+  if (obj1 === obj2) return true;
+  if (obj1 == null || obj2 == null) return false;
+  if (typeof obj1 !== typeof obj2) return false;
+  
+  if (typeof obj1 !== 'object') return obj1 === obj2;
+  
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+  
+  if (keys1.length !== keys2.length) return false;
+  
+  for (let key of keys1) {
+    if (!keys2.includes(key)) return false;
+    if (!deepEqual(obj1[key], obj2[key])) return false;
+  }
+  
+  return true;
+};
+
+function calcDogAge(dob, weekOffset = 0, nowDate) {
+  if (!dob) return "";
+  const dobDate = new Date(dob);
+  if (isNaN(dobDate)) return "";
+  let baseTime = nowDate ? nowDate.getTime() : Date.now();
+  let virtualDate = new Date(dobDate.getTime() + weekOffset * 7 * 24 * 60 * 60 * 1000);
+  let diff = baseTime - virtualDate.getTime();
+  if (diff < 0) diff = 0;
+  let ageDate = new Date(diff);
+  let years = ageDate.getUTCFullYear() - 1970;
+  let months = ageDate.getUTCMonth();
+  let days = ageDate.getUTCDate() - 1;
+  let weeks = Math.floor(days / 7);
+  let ageStr = "";
+  if (years > 0) ageStr += `${years}y `;
+  if (months > 0) ageStr += `${months}m `;
+  if (weeks > 0) ageStr += `${weeks}w`;
+  if (!ageStr) ageStr = "0w";
+  return ageStr.trim();
+}
+
+const calculateStreak = (completedDailyByDate) => {
+  const dates = Object.keys(completedDailyByDate).sort().reverse();
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let tempStreak = 0;
+
+  const today = new Date();
+
+  for (let i = 0; i < dates.length; i++) {
+    const date = dates[i];
+    const completedTasks = completedDailyByDate[date] || [];
+    const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+      acts.map(activity => `daily-${slot}-${activity}`)
+    );
+    
+    const isComplete = completedTasks.length >= allDailyKeys.length * 0.8;
+    
+    if (isComplete) {
+      tempStreak++;
+      if (i === 0 || dates[i-1] === today.toISOString().slice(0, 10)) {
+        currentStreak = tempStreak;
+      }
+    } else {
+      bestStreak = Math.max(bestStreak, tempStreak);
+      tempStreak = 0;
+    }
+  }
+  
+  bestStreak = Math.max(bestStreak, tempStreak);
+  return { currentStreak, bestStreak };
+};
+
+async function updateDogInfoStorageAndFirestore(familyId, name, breed, dob) {
+  await AsyncStorage.setItem("dogName", name);
+  await AsyncStorage.setItem("dogBreed", breed);
+  await AsyncStorage.setItem("dogDob", dob);
+  if (familyId) {
+    await db.collection("families").doc(familyId).set(
+      { dogName: name, dogBreed: breed, dogDob: dob },
+      { merge: true }
+    );
+  }
+}
+
+const showToast = (message, type = "info") => {
+  Alert.alert(
+    type === "success" ? "Success! 🎉" : type === "error" ? "Error! ❌" : "Info 💡",
+    message,
+    [{ text: "OK" }]
+  );
+};
+
+// ========== COMPONENTS ==========
+
+// Enhanced Progress Ring Component
+const ProgressRing = ({ progress, size = 100, strokeWidth = 8, color = "#3b82f6" }) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDashoffset = circumference - (progress * circumference);
+  
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size}>
+        <Circle
+          stroke="#e5e7eb"
+          fill="transparent"
+          strokeWidth={strokeWidth}
+          r={radius}
+          cx={size / 2}
+          cy={size / 2}
+        />
+        <Circle
+          stroke={color}
+          fill="transparent"
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          r={radius}
+          cx={size / 2}
+          cy={size / 2}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <Text style={{ position: 'absolute', fontSize: 18, fontWeight: '800', color: color }}>
+        {Math.round(progress * 100)}%
+      </Text>
+    </View>
+  );
+};
+
+// Enhanced Streak Counter Component
+const StreakCounter = ({ currentStreak, bestStreak }) => {
+  return (
+    <View style={styles.streakContainer}>
+      <View style={styles.streakItem}>
+        <Feather name="zap" size={28} color="#f97316" />
+        <Text style={styles.streakNumber}>{currentStreak}</Text>
+        <Text style={styles.streakLabel}>Current Streak</Text>
+      </View>
+      <View style={styles.streakItem}>
+        <Feather name="award" size={28} color="#eab308" />
+        <Text style={styles.streakNumber}>{bestStreak}</Text>
+        <Text style={styles.streakLabel}>Best Streak</Text>
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Training Calendar Component
+const TrainingCalendar = ({ completedDailyByDate, onDateSelect, selectedDate }) => {
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      days.push(day);
+    }
+    
+    return days;
+  };
+
+  const formatDate = (day) => {
+    const date = new Date();
+    date.setDate(day);
+    return date.toISOString().slice(0, 10);
+  };
+
+  const isCompleted = (day) => {
+    if (!day) return false;
+    const dateStr = formatDate(day);
+    const completed = completedDailyByDate[dateStr] || [];
+    const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+      acts.map(activity => `daily-${slot}-${activity}`)
+    );
+    return completed.length >= allDailyKeys.length * 0.8;
+  };
+
+  const isSelected = (day) => {
+    if (!day) return false;
+    return formatDate(day) === selectedDate;
+  };
+
+  const days = getDaysInMonth(new Date());
+
+  return (
+    <View style={styles.calendar}>
+      <Text style={styles.calendarTitle}>📅 Training Calendar</Text>
+      <View style={styles.weekDays}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+          <Text key={index} style={styles.weekDayText}>{day}</Text>
+        ))}
+      </View>
+      <View style={styles.daysGrid}>
+        {days.map((day, index) => (
+          <TouchableOpacity
+            key={index}
+            style={[
+              styles.dayCell,
+              isCompleted(day) && styles.completedDay,
+              isSelected(day) && styles.selectedDay,
+            ]}
+            onPress={() => day && onDateSelect(formatDate(day))}
+            disabled={!day}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.dayText,
+              isCompleted(day) && styles.completedDayText,
+              isSelected(day) && styles.selectedDayText,
+            ]}>
+              {day}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Smart Tips Component
+const SmartTips = ({ dogBreed, currentWeek, completionRate }) => {
+  const generateTips = () => {
+    const tips = [];
+    
+    if (dogBreed && breedTips[dogBreed]) {
+      tips.push({
+        type: 'breed',
+        icon: 'heart',
+        title: `${dogBreed} Tip`,
+        content: breedTips[dogBreed][Math.floor(Math.random() * breedTips[dogBreed].length)]
+      });
+    }
+    
+    if (completionRate < 0.5) {
+      tips.push({
+        type: 'motivation',
+        icon: 'trending-up',
+        title: 'Stay Consistent',
+        content: 'Try shorter, more frequent training sessions. Even 5 minutes twice a day makes a difference!'
+      });
+    } else if (completionRate > 0.8) {
+      tips.push({
+        type: 'achievement',
+        icon: 'award',
+        title: 'Great Progress!',
+        content: 'You\'re doing amazing! Consider adding some advanced tricks to keep your dog challenged.'
+      });
+    }
+    
+    if (currentWeek <= 4) {
+      tips.push({
+        type: 'foundation',
+        icon: 'home',
+        title: 'Foundation Building',
+        content: 'Focus on creating positive associations with training. Keep sessions short and end on a high note.'
+      });
+    }
+    
+    return tips.slice(0, 2);
+  };
+
+  const tips = generateTips();
+
+  return (
+    <View style={styles.tipsContainer}>
+      <Text style={styles.tipsHeader}>💡 Smart Tips</Text>
+      {tips.map((tip, index) => (
+        <View key={index} style={styles.tipCard}>
+          <View style={styles.tipHeader}>
+            <Feather name={tip.icon} size={22} color="#8b5cf6" />
+            <Text style={styles.tipTitle}>{tip.title}</Text>
+          </View>
+          <Text style={styles.tipContent}>{tip.content}</Text>
+        </View>
+      ))}
+    </View>
+  );
+};
+
+// Enhanced Photo Progress Component
+const PhotoProgress = ({ week, photos, onPhotoAdded }) => {
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera permission is required to take photos');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const newPhoto = {
+        uri: result.assets[0].uri,
+        timestamp: new Date().toISOString(),
+        week: week,
+      };
+      onPhotoAdded(newPhoto);
+      showToast("Photo added successfully!", "success");
+    }
+  };
+
+  const weekPhotos = photos.filter(photo => photo.week === week);
+
+  return (
+    <View style={styles.photoContainer}>
+      <Text style={styles.photoTitle}>📸 Progress Photos - Week {week}</Text>
+      
+      <TouchableOpacity style={styles.cameraButton} onPress={takePhoto} activeOpacity={0.7}>
+        <Feather name="camera" size={26} color="#3b82f6" />
+        <Text style={styles.cameraButtonText}>Add Progress Photo</Text>
+      </TouchableOpacity>
+
+      <View style={styles.photosGrid}>
+        {weekPhotos.map((photo, index) => (
+          <Image key={index} source={{ uri: photo.uri }} style={styles.photo} />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Quick Actions Component
+const QuickActions = ({ onAddNote, onTakePhoto, onMarkComplete }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [animation] = useState(new Animated.Value(0));
+
+  const toggleMenu = () => {
+    const toValue = isOpen ? 0 : 1;
+    
+    Animated.timing(animation, {
+      toValue,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+    
+    setIsOpen(!isOpen);
+  };
+
+  const actionButtons = [
+    { 
+      icon: 'edit-3', 
+      action: onAddNote, 
+      color: '#10b981',
+      shadowColor: '#10b981'
+    },
+    { 
+      icon: 'camera', 
+      action: onTakePhoto, 
+      color: '#3b82f6',
+      shadowColor: '#3b82f6'
+    },
+    { 
+      icon: 'check', 
+      action: onMarkComplete, 
+      color: '#8b5cf6',
+      shadowColor: '#8b5cf6'
+    },
+  ];
+
+  return (
+    <View style={styles.quickActionsContainer}>
+      {actionButtons.map((button, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            styles.actionButton,
+            {
+              transform: [
+                {
+                  translateY: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, -(60 * (index + 1))],
+                  }),
+                },
+                {
+                  scale: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 1],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[styles.actionButtonInner, { 
+              backgroundColor: button.color,
+              shadowColor: button.shadowColor
+            }]}
+            onPress={() => {
+              button.action();
+              toggleMenu();
+            }}
+            activeOpacity={0.8}
+          >
+            <Feather name={button.icon} size={20} color="white" />
+          </TouchableOpacity>
+        </Animated.View>
+      ))}
+      
+      <TouchableOpacity style={styles.mainButton} onPress={toggleMenu} activeOpacity={0.8}>
+        <Animated.View
+          style={{
+            transform: [
+              {
+                rotate: animation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', '45deg'],
+                }),
+              },
+            ],
+          }}
+        >
+          <Feather name="plus" size={26} color="white" />
+        </Animated.View>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Enhanced Achievement Badge Component
+const AchievementBadge = ({ achievement, unlocked }) => (
+  <View style={[styles.achievementBadge, unlocked && styles.achievementUnlocked]}>
+    <Feather 
+      name={achievement.icon} 
+      size={28} 
+      color={unlocked ? "#f59e0b" : "#9ca3af"} 
+    />
+    <Text style={[styles.achievementTitle, unlocked && styles.achievementTitleUnlocked]}>
+      {achievement.title}
+    </Text>
+    <Text style={[styles.achievementDescription, unlocked && styles.achievementDescriptionUnlocked]}>
+      {achievement.description}
+    </Text>
+  </View>
+);
+
+// ========== ERROR BOUNDARY ==========
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('App Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Feather name="alert-triangle" size={48} color="#ef4444" />
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorText}>Please restart the app</Text>
+          <TouchableOpacity 
+            style={styles.errorButton}
+            onPress={() => this.setState({ hasError: false })}
+          >
+            <Text style={styles.errorButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// ========== MAIN APP COMPONENT ==========
+function MainApp() {
+  // --- State ---
+  const [isOffline, setIsOffline] = useState(false);
+  const [familyId, setFamilyId] = useState(null);
+  const [dogName, setDogName] = useState(null);
+  const [dogBreed, setDogBreed] = useState(null);
+  const [dogDob, setDogDob] = useState(null);
+
+  const [inputId, setInputId] = useState("");
+  const [inputDog, setInputDog] = useState("");
+  const [inputBreed, setInputBreed] = useState("");
+  const [inputBreedOther, setInputBreedOther] = useState("");
+  const [inputDob, setInputDob] = useState("");
+
+  const [showDogInput, setShowDogInput] = useState(false);
+  const [familyDogLoading, setFamilyDogLoading] = useState(true);
+  const [checkingFamilyId, setCheckingFamilyId] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+
+  const [editDogModal, setEditDogModal] = useState(false);
+  const [editDogName, setEditDogName] = useState("");
+  const [editDogBreed, setEditDogBreed] = useState("");
+  const [editDogDob, setEditDogDob] = useState("");
+  const [editDogBreedOther, setEditDogBreedOther] = useState("");
+
+  const [currentWeek, setCurrentWeek] = useState(1);
+  const [completedActivities, setCompletedActivities] = useState([]);
+  const [dailyNotes, setDailyNotes] = useState({});
+  const [viewMode, setViewMode] = useState("daily");
+  const [selectedDate, setSelectedDate] = useState(() => getCurrentDate());
+  const [completedDailyByDate, setCompletedDailyByDate] = useState({});
+
+  const [progressPhotos, setProgressPhotos] = useState([]);
+  const [unlockedAchievements, setUnlockedAchievements] = useState([]);
+  const [quickNoteText, setQuickNoteText] = useState("");
+  const [showQuickNote, setShowQuickNote] = useState(false);
+
+  const [family, setFamily] = useState([
+    { id: 1, name: "Primary Trainer", editing: false },
+    { id: 2, name: "Family Member 2", editing: false },
+    { id: 3, name: "Family Member 3", editing: false }
+  ]);
+  const [newFamilyName, setNewFamilyName] = useState("");
+  const [editFamilyName, setEditFamilyName] = useState({});
+  const [editingMemberId, setEditingMemberId] = useState(null);
+
+  const [sharedNotes, setSharedNotes] = useState([]);
+  const [newSharedNote, setNewSharedNote] = useState("");
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [editingNoteText, setEditingNoteText] = useState("");
+  const [currentUserName, setCurrentUserName] = useState("Wiewioreq");
+
+  const [showDailyConfetti, setShowDailyConfetti] = useState(false);
+  const [showWeeklyConfetti, setShowWeeklyConfetti] = useState(false);
+  const [currentDogAge, setCurrentDogAge] = useState(() => calcDogAge(dogDob, 0, new Date()));
+
+  const syncTimeout = useRef();
+  const lastSyncedData = useRef({});
+  const dobInputRef = useRef(null);
+
+  // --- Effects ---
+  useEffect(() => {
+    const setupNotifications = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted' || !dogName) return;
+
+      await Notifications.cancelAllScheduledNotificationsAsync();
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `Good morning! 🌅`,
+          body: `Time for ${dogName}'s morning training session`,
+          sound: true,
+        },
+        trigger: {
+          hour: 8,
+          minute: 0,
+          repeats: true,
+        },
+      });
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `Evening training time! 🌙`,
+          body: `Don't forget ${dogName}'s evening practice`,
+          sound: true,
+        },
+        trigger: {
+          hour: 18,
+          minute: 0,
+          repeats: true,
+        },
+      });
+    };
+    if (dogName) setupNotifications();
+  }, [dogName]);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOffline(!state.isConnected);
+    });
+    NetInfo.fetch().then(state => setIsOffline(!state.isConnected));
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (syncTimeout.current) {
+        clearTimeout(syncTimeout.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const id = await AsyncStorage.getItem("familyId");
+        const dog = await AsyncStorage.getItem("dogName");
+        const breed = await AsyncStorage.getItem("dogBreed");
+        const dob = await AsyncStorage.getItem("dogDob");
+        const username = await AsyncStorage.getItem("memberName");
+        const photos = await AsyncStorage.getItem("progressPhotos");
+        const achievements = await AsyncStorage.getItem("unlockedAchievements");
+        if (id) setFamilyId(id);
+        if (dog) setDogName(dog);
+        if (breed) setDogBreed(breed);
+        if (dob) setDogDob(dob);
+        if (username) setCurrentUserName(username);
+        if (photos) setProgressPhotos(JSON.parse(photos));
+        if (achievements) setUnlockedAchievements(JSON.parse(achievements));
+      } catch (e) {
+        console.error("Error loading app data:", e);
+      }
+      try {
+        const cdbd = await AsyncStorage.getItem("completedDailyByDate");
+        if (cdbd) {
+          const parsedData = JSON.parse(cdbd);
+          setCompletedDailyByDate(parsedData);
+        }
+      } catch (e) {
+        console.error("Failed to parse completedDailyByDate:", e);
+      } finally {
+        setFamilyDogLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (currentUserName) {
+      AsyncStorage.setItem("memberName", currentUserName);
+    }
+  }, [currentUserName]);
+
+  useEffect(() => {
+    AsyncStorage.setItem("progressPhotos", JSON.stringify(progressPhotos));
+  }, [progressPhotos]);
+
+  useEffect(() => {
+    AsyncStorage.setItem("unlockedAchievements", JSON.stringify(unlockedAchievements));
+  }, [unlockedAchievements]);
+
+  // Force Sync Handler
+  const handleForceSync = useCallback(() => {
+    const dataToSync = {
+      currentWeek,
+      completedActivities,
+      dailyNotes,
+      dogName,
+      dogBreed,
+      dogDob,
+      family,
+      sharedNotes,
+      completedDailyByDate,
+      progressPhotos,
+      unlockedAchievements
+    };
+    syncToFirebase(dataToSync);
+  }, [currentWeek, completedActivities, dailyNotes, dogName, dogBreed, dogDob, family, sharedNotes, completedDailyByDate, progressPhotos, unlockedAchievements]);
+
+  const syncToFirebase = useCallback(async (data) => {
+    if (!familyId || !data) return;
+    if (deepEqual(lastSyncedData.current, data)) {
+      setSyncing(false);
+      return;
+    }
+    try {
+      setSyncing(true);
+      await db.collection("families").doc(familyId).set(data, { merge: true });
+      lastSyncedData.current = { ...data };
+      console.log("Data synced to Firebase successfully");
+    } catch (e) {
+      console.error("Failed to sync to Firebase:", e);
+      if (!isOffline) {
+        Alert.alert("Sync Error", "Failed to save changes. Please check your connection.");
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [familyId, isOffline]);
+
+  useEffect(() => {
+    if (loading || !familyId) return;
+    const dataToSync = {
+      currentWeek,
+      completedActivities,
+      dailyNotes,
+      dogName,
+      dogBreed,
+      dogDob,
+      family,
+      sharedNotes,
+      completedDailyByDate,
+      progressPhotos,
+      unlockedAchievements
+    };
+    if (syncTimeout.current) {
+      clearTimeout(syncTimeout.current);
+    }
+    syncTimeout.current = setTimeout(() => {
+      syncToFirebase(dataToSync);
+      AsyncStorage.setItem("completedDailyByDate", JSON.stringify(completedDailyByDate))
+        .catch(e => console.error("AsyncStorage save error", e));
+    }, 500);
+  }, [
+    currentWeek, completedActivities, dailyNotes, dogName, dogBreed,
+    dogDob, family, sharedNotes, completedDailyByDate, progressPhotos,
+    unlockedAchievements, syncToFirebase, loading, familyId
+  ]);
+
+  useEffect(() => {
+    if (!familyId) return;
+    setLoading(true);
+    setNotesLoading(true);
+    const unsubscribe = db
+      .collection("families")
+      .doc(familyId)
+      .onSnapshot(
+        docSnap => {
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            if (data.currentWeek !== undefined && data.currentWeek !== currentWeek) {
+              setCurrentWeek(data.currentWeek);
+            }
+            if (data.completedActivities && !deepEqual(data.completedActivities, completedActivities)) {
+              setCompletedActivities(data.completedActivities);
+            }
+            if (data.dailyNotes && !deepEqual(data.dailyNotes, dailyNotes)) {
+              setDailyNotes(data.dailyNotes);
+            }
+            if (data.family && !deepEqual(data.family, family)) {
+              setFamily(data.family);
+            }
+            if (data.sharedNotes && !deepEqual(data.sharedNotes, sharedNotes)) {
+              setSharedNotes(data.sharedNotes);
+            }
+            if (data.dogName && data.dogName !== dogName) {
+              setDogName(data.dogName);
+              AsyncStorage.setItem("dogName", data.dogName);
+            }
+            if (data.dogBreed && data.dogBreed !== dogBreed) {
+              setDogBreed(data.dogBreed);
+              AsyncStorage.setItem("dogBreed", data.dogBreed);
+            }
+            if (data.dogDob && data.dogDob !== dogDob) {
+              setDogDob(data.dogDob);
+              AsyncStorage.setItem("dogDob", data.dogDob);
+            }
+            if (data.completedDailyByDate && !deepEqual(data.completedDailyByDate, completedDailyByDate)) {
+              setCompletedDailyByDate(data.completedDailyByDate);
+              AsyncStorage.setItem("completedDailyByDate", JSON.stringify(data.completedDailyByDate))
+                .catch(e => console.error("AsyncStorage save error", e));
+            }
+            if (data.progressPhotos && !deepEqual(data.progressPhotos, progressPhotos)) {
+              setProgressPhotos(data.progressPhotos);
+            }
+            if (data.unlockedAchievements && !deepEqual(data.unlockedAchievements, unlockedAchievements)) {
+              setUnlockedAchievements(data.unlockedAchievements);
+            }
+            lastSyncedData.current = {
+              currentWeek: data.currentWeek ?? 1,
+              completedActivities: data.completedActivities ?? [],
+              dailyNotes: data.dailyNotes ?? {},
+              dogName: data.dogName,
+              dogBreed: data.dogBreed,
+              dogDob: data.dogDob,
+              family: data.family ?? [],
+              sharedNotes: data.sharedNotes ?? [],
+              completedDailyByDate: data.completedDailyByDate ?? {},
+              progressPhotos: data.progressPhotos ?? [],
+              unlockedAchievements: data.unlockedAchievements ?? []
+            };
+          }
+          setLoading(false);
+          setNotesLoading(false);
+        },
+        err => {
+          setLoading(false);
+          setNotesLoading(false);
+          console.error("Firestore snapshot error:", err);
+          if (!isOffline) {
+            Alert.alert("Sync error", "Could not sync with Firebase: " + err.message);
+          }
+        }
+      );
+    return unsubscribe;
+  }, [familyId, currentWeek, completedActivities, dailyNotes, family, sharedNotes, dogName, dogBreed, dogDob, completedDailyByDate, progressPhotos, unlockedAchievements, isOffline]);
+
+  useEffect(() => {
+    if (!dogDob) return;
+    const interval = setInterval(() => {
+      setCurrentDogAge(calcDogAge(dogDob, 0, new Date()));
+    }, 60 * 1000);
+    setCurrentDogAge(calcDogAge(dogDob, 0, new Date()));
+    return () => clearInterval(interval);
+  }, [dogDob]);
+
+  useEffect(() => {
+    const checkAchievements = () => {
+      const newAchievements = [];
+      const { currentStreak } = calculateStreak(completedDailyByDate);
+      if (currentWeek >= 1 && !unlockedAchievements.includes('first_week')) {
+        newAchievements.push('first_week');
+      }
+      if (currentStreak >= 7 && !unlockedAchievements.includes('streak_7')) {
+        newAchievements.push('streak_7');
+      }
+      if (currentStreak >= 30 && !unlockedAchievements.includes('streak_30')) {
+        newAchievements.push('streak_30');
+      }
+      if (progressPhotos.length > 0 && !unlockedAchievements.includes('photo_first')) {
+        newAchievements.push('photo_first');
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      const completedToday = completedDailyByDate[today] || [];
+      const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+        acts.map(activity => `daily-${slot}-${activity}`)
+      );
+      if (completedToday.length >= allDailyKeys.length && !unlockedAchievements.includes('all_daily')) {
+        newAchievements.push('all_daily');
+      }
+      const currentWeekActivities = weeklyPlans[currentWeek] || [];
+      const weekCompleted = currentWeekActivities.filter(act =>
+        completedActivities.includes(`${currentWeek}-${act}`)
+      );
+      if (weekCompleted.length === currentWeekActivities.length && 
+          currentWeekActivities.length > 0 && 
+          !unlockedAchievements.includes('week_perfect')) {
+        newAchievements.push('week_perfect');
+      }
+      if (newAchievements.length > 0) {
+        setUnlockedAchievements(prev => [...prev, ...newAchievements]);
+        newAchievements.forEach(achievementId => {
+          const achievement = achievements.find(a => a.id === achievementId);
+          if (achievement) {
+            showToast(`Achievement Unlocked: ${achievement.title}`, "success");
+          }
+        });
+      }
+    };
+    checkAchievements();
+  }, [currentWeek, completedActivities, completedDailyByDate, progressPhotos, unlockedAchievements]);
+
+  // HANDLER FUNCTIONS
+
+  // Family ID submission
+  const handleFamilyIdSubmit = async () => {
+    if (!inputId.trim()) return;
+    setCheckingFamilyId(true);
+    const famId = inputId.trim();
+    
+    try {
+      const docSnap = await db.collection("families").doc(famId).get();
+      if (docSnap.exists) {
+        const data = docSnap.data();
+        if (data.dogName && data.dogBreed && data.dogDob) {
+          await AsyncStorage.setItem("familyId", famId);
+          await AsyncStorage.setItem("dogName", data.dogName);
+          await AsyncStorage.setItem("dogBreed", data.dogBreed);
+          await AsyncStorage.setItem("dogDob", data.dogDob);
+          setFamilyId(famId);
+          setDogName(data.dogName);
+          setDogBreed(data.dogBreed);
+          setDogDob(data.dogDob);
+          setCheckingFamilyId(false);
+          setShowDogInput(false);
+        } else {
+          Alert.alert("Family ID Exists", "This Family ID exists but is missing some dog info. Please contact your admin.");
+          setCheckingFamilyId(false);
+        }
+      } else {
+        Alert.alert(
+          "Create New Family?",
+          `No family found for ID "${famId}". Do you want to create a new family with this ID?`,
+          [
+            { text: "Cancel", style: "cancel", onPress: () => setCheckingFamilyId(false) },
+            { text: "Create", style: "default", onPress: () => { setShowDogInput(true); setCheckingFamilyId(false); } }
+          ]
+        );
+      }
+    } catch (e) {
+      Alert.alert("Network error", e.message);
+      setCheckingFamilyId(false);
+    }
+  };
+
+  // Dog details submission
+  const handleDogDetailsSubmit = async () => {
+    const breedToSave = inputBreed === "Other" ? inputBreedOther.trim() : inputBreed;
+    
+    if (!inputId.trim() || !inputDog.trim() || !breedToSave || !inputDob.trim()) {
+      Alert.alert("Missing Information", "Please fill in all required fields.");
+      return;
+    }
+    
+    if (inputBreed === "Other" && !inputBreedOther.trim()) {
+      Alert.alert("Breed Required", "Please specify the breed.");
+      return;
+    }
+    
+    if (!isValidDate(inputDob.trim())) {
+      Alert.alert("Invalid Date", "Please enter a valid date in YYYY-MM-DD format.");
+      return;
+    }
+    
+    const famId = inputId.trim();
+    const dName = inputDog.trim();
+    const dBreed = breedToSave;
+    const dDob = inputDob.trim();
+    
+    try {
+      await db.collection("families").doc(famId).set({
+        dogName: dName,
+        dogBreed: dBreed,
+        dogDob: dDob,
+        family: [
+          { id: 1, name: "Primary Trainer", editing: false },
+          { id: 2, name: "Family Member 2", editing: false },
+          { id: 3, name: "Family Member 3", editing: false }
+        ]
+      }, { merge: true });
+      
+      await AsyncStorage.setItem("familyId", famId);
+      await AsyncStorage.setItem("dogName", dName);
+      await AsyncStorage.setItem("dogBreed", dBreed);
+      await AsyncStorage.setItem("dogDob", dDob);
+      
+      setFamilyId(famId);
+      setDogName(dName);
+      setDogBreed(dBreed);
+      setDogDob(dDob);
+      setShowDogInput(false);
+    } catch (e) {
+      Alert.alert("Network error", e.message);
+    }
+  };
+
+  // Activity toggle
+  const toggleActivity = useCallback((week, activity) => {
+    const key = `${week}-${activity}`;
+    setCompletedActivities(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  }, []);
+
+  // Daily activity toggle
+  const toggleDailyActivity = useCallback((timeSlot, activity) => {
+    const key = `daily-${timeSlot}-${activity}`;
+    const today = getCurrentDate();
+    
+    setCompletedDailyByDate(prev => {
+      const prevForToday = prev[today] || [];
+      const isCompleted = prevForToday.includes(key);
+      
+      return {
+        ...prev,
+        [today]: isCompleted 
+          ? prevForToday.filter(k => k !== key)
+          : [...prevForToday, key]
+      };
+    });
+  }, []);
+
+  // Notes handling
+  const addNote = useCallback(async (date, note) => {
+    const updatedNotes = { ...dailyNotes, [date]: note };
+    setDailyNotes(updatedNotes);
+    
+    if (familyId) {
+      try {
+        await db.collection("families").doc(familyId).set(
+          { dailyNotes: updatedNotes }, 
+          { merge: true }
+        );
+      } catch (e) {
+        console.error("Failed to save daily note:", e);
+      }
+    }
+  }, [dailyNotes, familyId]);
+
+  const handleAddSharedNote = async () => {
+    const trimmed = newSharedNote.trim();
+    if (!trimmed) return;
+    
+    const author = currentUserName || (family && family.length > 0 ? family[0].name : "You");
+    
+    const noteObj = {
+      id: Date.now().toString() + Math.random().toString(36).slice(2),
+      text: trimmed,
+      author,
+      timestamp: new Date().toISOString(),
+      authorId: currentUserName
+    };
+    
+    const updatedNotes = [noteObj, ...(sharedNotes || [])];
+    
+    setSharedNotes(updatedNotes);
+    setNewSharedNote("");
+    
+    try {
+      await db.collection("families").doc(familyId).set(
+        { sharedNotes: updatedNotes },
+        { merge: true }
+      );
+    } catch (e) {
+      console.error("Failed to save shared note:", e);
+      Alert.alert("Error", "Failed to save note. Please try again.");
+      setSharedNotes(sharedNotes);
+      setNewSharedNote(trimmed);
+    }
+  };
+
+  const saveNoteEdit = async (noteId) => {
+    if (!editingNoteText.trim()) {
+      Alert.alert("Cannot save", "Note cannot be empty.");
+      return;
+    }
+
+    const updatedNotes = sharedNotes.map(note =>
+      note.id === noteId ? { 
+        ...note, 
+        text: editingNoteText.trim(),
+        edited: true,
+        editTimestamp: new Date().toISOString()
+      } : note
+    );
+    
+    setSharedNotes(updatedNotes);
+    setEditingNoteId(null);
+    setEditingNoteText("");
+    
+    try {
+      await db.collection("families").doc(familyId).set(
+        { sharedNotes: updatedNotes },
+        { merge: true }
+      );
+    } catch (e) {
+      console.error("Failed to update note:", e);
+      Alert.alert("Error", "Failed to update the note. Please try again.");
+    }
+  };
+
+  // Family member management
+  const handleEditFamilyMember = useCallback(id => {
+    setEditingMemberId(id);
+    setEditFamilyName({ ...editFamilyName, [id]: family.find(f => f.id === id)?.name || "" });
+  }, [editFamilyName, family]);
+
+  const handleSaveFamilyMember = useCallback((id, newName) => {
+    setFamily(family =>
+      family.map(f =>
+        f.id === id ? { ...f, name: newName || "Unnamed", editing: false } : f
+      )
+    );
+    setEditingMemberId(null);
+  }, []);
+
+  const handleRemoveFamilyMember = useCallback(id => {
+    Alert.alert(
+      "Remove member",
+      "Are you sure you want to remove this family member?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => setFamily(family => family.filter(f => f.id !== id))
+        }
+      ]
+    );
+  }, []);
+
+  const handleAddFamilyMember = useCallback(() => {
+    if (!newFamilyName.trim()) return;
+    setFamily(family => [...family, { id: Date.now(), name: newFamilyName, editing: false }]);
+    setNewFamilyName("");
+  }, [newFamilyName]);
+
+  // Dog editing modal
+  const openEditDogModal = useCallback(() => {
+    try {
+      const currentName = dogName || "";
+      
+      let currentBreed = "Other";
+      let currentBreedOther = "";
+      
+      if (dogBreed) {
+        if (commonUKBreeds.includes(dogBreed)) {
+          currentBreed = dogBreed;
+        } else {
+          currentBreed = "Other";
+          currentBreedOther = dogBreed;
+        }
+      }
+      
+      const currentDob = dogDob || "";
+      
+      setEditDogName(currentName);
+      setEditDogBreed(currentBreed);
+      setEditDogBreedOther(currentBreedOther);
+      setEditDogDob(currentDob);
+      setEditDogModal(true);
+      
+    } catch (e) {
+      console.error("Error opening dog edit modal:", e);
+      Alert.alert("Error", "Could not open the edit form. Please try again.");
+    }
+  }, [dogName, dogBreed, dogDob]);
+
+  const saveDogInfo = async () => {
+    const name = editDogName?.trim() || "";
+    const dob = editDogDob?.trim() || "";
+    const breedOther = editDogBreedOther?.trim() || "";
+    
+    let breedToSave = editDogBreed === "Other" ? breedOther : editDogBreed;
+    
+    if (!name || !breedToSave || !dob) {
+      Alert.alert("Missing Info", "All fields are required.");
+      return;
+    }
+    
+    if (editDogBreed === "Other" && !breedOther) {
+      Alert.alert("Breed Required", "Please specify the breed.");
+      return;
+    }
+    
+    if (!isValidDate(dob)) {
+      Alert.alert("Invalid Date", "Please enter a valid date in YYYY-MM-DD format.");
+      return;
+    }
+    
+    try {
+      setDogName(name);
+      setDogBreed(breedToSave);
+      setDogDob(dob);
+      
+      await updateDogInfoStorageAndFirestore(familyId, name, breedToSave, dob);
+      setEditDogModal(false);
+    } catch (e) {
+      Alert.alert("Network error", e.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    setFamilyDogLoading(true);
+    await AsyncStorage.removeItem("familyId");
+    await AsyncStorage.removeItem("dogName");
+    await AsyncStorage.removeItem("dogBreed");
+    await AsyncStorage.removeItem("dogDob");
+    await AsyncStorage.removeItem("completedDailyByDate");
+    setFamilyId(null);
+    setDogName(null);
+    setDogBreed(null);
+    setDogDob(null);
+    setInputId("");
+    setInputDog("");
+    setInputBreed("");
+    setInputBreedOther("");
+    setInputDob("");
+    setShowDogInput(false);
+    setFamilyDogLoading(false);
+  };
+
+  // Photo handlers
+  const handlePhotoAdded = useCallback((newPhoto) => {
+    setProgressPhotos(prev => [...prev, newPhoto]);
+  }, []);
+
+  // Quick action handlers
+  const handleQuickAddNote = () => {
+    setShowQuickNote(true);
+  };
+
+  const handleQuickTakePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera permission is required to take photos');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const newPhoto = {
+        uri: result.assets[0].uri,
+        timestamp: new Date().toISOString(),
+        week: currentWeek,
+      };
+      handlePhotoAdded(newPhoto);
+      showToast("Photo added successfully!", "success");
+    }
+  };
+
+  const handleQuickMarkComplete = () => {
+    const today = getCurrentDate();
+    const completedToday = completedDailyByDate[today] || [];
+    const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+      acts.map(activity => `daily-${slot}-${activity}`)
+    );
+    
+    if (completedToday.length >= allDailyKeys.length) {
+      showToast("All daily tasks already completed! 🎉", "success");
+    } else {
+      const remaining = allDailyKeys.filter(key => !completedToday.includes(key));
+      showToast(`${remaining.length} tasks remaining for today`, "info");
+    }
+  };
+
+  // Quick note modal handler
+  const handleQuickNoteSubmit = async () => {
+    if (!quickNoteText.trim()) return;
+    
+    await addNote(selectedDate, quickNoteText.trim());
+    setQuickNoteText("");
+    setShowQuickNote(false);
+    showToast("Note added!", "success");
+  };
+
+  // Calculated values
+  const today = getCurrentDate();
+  const completedToday = completedDailyByDate[today] || [];
+  const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+    acts.map(activity => `daily-${slot}-${activity}`)
+  );
+  const completedDaily = completedToday.length;
+  const dailyRate = allDailyKeys.length > 0 ? completedDaily / allDailyKeys.length : 0;
+  
+  const completionRate = (() => {
+    const currentWeekActivities = weeklyPlans[currentWeek] || [];
+    const completed = currentWeekActivities.filter(act =>
+      completedActivities.includes(`${currentWeek}-${act}`)
+    ).length;
+    return currentWeekActivities.length
+      ? completed / currentWeekActivities.length
+      : 0;
+  })();
+
+  const currentStage = getCurrentStage(currentWeek);
+  const { currentStreak, bestStreak } = calculateStreak(completedDailyByDate);
+
+  // Confetti effects
+  useEffect(() => {
+    if (dailyRate === 1 && !showDailyConfetti) {
+      setShowDailyConfetti(true);
+      setTimeout(() => setShowDailyConfetti(false), 3500);
+    }
+  }, [dailyRate, showDailyConfetti]);
+
+  useEffect(() => {
+    const currentWeekActivities = weeklyPlans[currentWeek] || [];
+    const allDone = currentWeekActivities.every(act =>
+      completedActivities.includes(`${currentWeek}-${act}`)
+    );
+    if (allDone && !showWeeklyConfetti && currentWeekActivities.length > 0) {
+      setShowWeeklyConfetti(true);
+      setTimeout(() => setShowWeeklyConfetti(false), 3500);
+    }
+  }, [currentWeek, completedActivities, showWeeklyConfetti]);
+
+  const navigationTabs = [
+    { key: "daily", iconLib: Feather, iconName: "calendar" },
+    { key: "weekly", iconLib: Feather, iconName: "clock" },
+    { key: "progress", iconLib: Feather, iconName: "trending-up" },
+    { key: "achievements", iconLib: Feather, iconName: "award" },
+    { key: "family", iconLib: Feather, iconName: "users" },
+    { key: "notes", iconLib: Feather, iconName: "file-text" }
+  ];
+
+  // Loading states
+  if (familyDogLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text style={styles.loadingText}>Loading…</Text>
+      </View>
+    );
+  }
+
+// Setup screens
+  if (!familyId || !dogName || !dogBreed || !dogDob) {
+    if (!showDogInput) {
+      return (
+        <View style={styles.setupContainer}>
+          <Text style={styles.welcomeTitle}>🐾 Welcome!</Text>
+          <Text style={styles.setupText}>
+            Enter your Family ID to sync training data with your household.
+          </Text>
+          <Text style={styles.setupSubtext}>
+            Use the same Family ID on all your family's devices. Create a new one or enter an existing ID to join.
+          </Text>
+          <TextInput
+            placeholder="Family ID (e.g. ludo-smiths)"
+            value={inputId}
+            onChangeText={setInputId}
+            style={styles.setupInput}
+          />
+          <TouchableOpacity onPress={handleFamilyIdSubmit} style={styles.setupButton} activeOpacity={0.8}>
+            {checkingFamilyId
+              ? <ActivityIndicator size="small" color="#fff"/>
+              : <Text style={styles.setupButtonText}>Continue</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      );
+    } else {
+      return (
+        <View style={styles.setupContainer}>
+          <Text style={styles.welcomeTitle}>Create a New Family Group</Text>
+          <Text style={styles.setupText}>
+            Set your Family ID and Dog's Details (only needed once).
+          </Text>
+          <TextInput
+            value={inputId}
+            editable={false}
+            style={[styles.setupInput, styles.disabledInput]}
+          />
+          <TextInput
+            placeholder="Dog Name (e.g. Ludo)"
+            value={inputDog}
+            onChangeText={setInputDog}
+            style={styles.setupInput}
+          />
+          <RNPickerSelect
+            onValueChange={value => setInputBreed(value)}
+            value={inputBreed}
+            placeholder={{ label: "Select Dog Breed...", value: "" }}
+            items={[
+              ...commonUKBreeds.map(breed => ({ label: breed, value: breed })),
+              { label: "Other", value: "Other" }
+            ]}
+            style={{
+              inputIOS: styles.pickerInput,
+              inputAndroid: styles.pickerInput
+            }}
+          />
+          {inputBreed === "Other" && (
+            <TextInput
+              placeholder="Type breed"
+              value={inputBreedOther}
+              onChangeText={setInputBreedOther}
+              style={styles.setupInput}
+            />
+          )}
+          <TextInput
+            placeholder="Date of Birth (YYYY-MM-DD)"
+            value={inputDob}
+            onChangeText={setInputDob}
+            keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"}
+            style={styles.setupInput}
+            ref={dobInputRef}
+            maxLength={10}
+          />
+          <TouchableOpacity onPress={handleDogDetailsSubmit} style={styles.setupButton} activeOpacity={0.8}>
+            <Text style={styles.setupButtonText}>Create Family</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+  }
+
+  // --- RENDER ---
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.mainContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {isOffline && (
+            <View style={styles.offlineBanner}>
+              <Feather name="wifi-off" size={18} color="#fff" />
+              <Text style={styles.offlineText}>You are offline. Changes will sync when back online.</Text>
+            </View>
+          )}
+
+          {showDailyConfetti && (
+            <ConfettiCannon
+              count={200}
+              origin={{ x: -10, y: 0 }}
+              fallSpeed={2000}
+              fadeOut={true}
+              autoStart={true}
+            />
+          )}
+          {showWeeklyConfetti && (
+            <ConfettiCannon
+              count={300}
+              origin={{ x: -10, y: 0 }}
+              fallSpeed={2500}
+              fadeOut={true}
+              autoStart={true}
+            />
+          )}
+
+          {/* Header */}
+          <View style={styles.headerContainer}>
+            <View style={styles.headerTop}>
+              <View style={styles.dogInfo}>
+                <TouchableOpacity onPress={openEditDogModal} style={styles.editButton} activeOpacity={0.7}>
+                  <Feather name="edit-2" size={16} color="#6b7280" />
+                </TouchableOpacity>
+                <Text style={styles.dogName}>{dogName}</Text>
+                <Text style={styles.dogDetails}>
+                  {dogBreed} • {currentDogAge}
+                </Text>
+              </View>
+              <View style={styles.dateTimeContainer}>
+                <Text style={styles.currentDate}>{getCurrentDate()}</Text>
+                <Text style={styles.currentTime}>{getCurrentTime()}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.switchFamilyButton}
+                onPress={handleLogout}
+                activeOpacity={0.8}
+              >
+                <Feather name="users" size={18} color="#2563eb" />
+                <Text style={styles.switchFamilyText}>Switch Family</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerSyncBtn}
+                onPress={handleForceSync}
+                disabled={syncing}
+                activeOpacity={0.8}
+              >
+                <Feather name="refresh-cw" size={18} color="#2563eb" />
+                <Text style={styles.headerSyncText}>{syncing ? "Syncing..." : "Sync"}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Navigation */}
+          <View style={styles.navigationContainer}>
+            {navigationTabs.map(tab => {
+              const IconComponent = tab.iconLib;
+              const isActive = viewMode === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[
+                    styles.navTab,
+                    isActive && styles.navTabActive
+                  ]}
+                  onPress={() => setViewMode(tab.key)}
+                  activeOpacity={0.7}
+                >
+                  <IconComponent
+                    name={tab.iconName}
+                    size={22}
+                    color={isActive ? "#ffffff" : "#64748b"}
+                  />
+                  {isActive && (
+                    <View style={{
+                      position: 'absolute',
+                      bottom: 2,
+                      width: 4,
+                      height: 4,
+                      borderRadius: 2,
+                      backgroundColor: '#ffffff'
+                    }} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Main content by viewMode */}
+          {viewMode === "daily" && (
+            <View>
+              <View style={styles.progressContainer}>
+                <View style={styles.progressHeader}>
+                  <Feather name="sun" size={22} color="#f59e42" />
+                  <Text style={styles.progressTitle}>Today's Progress</Text>
+                </View>
+                <View style={styles.progressStats}>
+                  <ProgressRing progress={dailyRate} size={80} />
+                </View>
+              </View>
+              {/* Enhanced Time Slot Rendering */}
+              {Object.entries(dailyRoutine).map(([timeSlot, acts]) => {
+                const colors = timeSlotColors[timeSlot] || timeSlotColors.morning;
+                return (
+                  <View 
+                    key={timeSlot} 
+                    style={[
+                      styles.timeSlotContainer,
+                      { 
+                        backgroundColor: colors.backgroundColor,
+                        borderLeftColor: colors.borderColor,
+                        borderWidth: 1,
+                        borderColor: colors.borderColor + '40'
+                      }
+                    ]}
+                  >
+                    <Text style={[styles.timeSlotTitle, { color: colors.textColor }]}>
+                      <Feather name="clock" size={16} color={colors.iconColor} />{" "}
+                      {timeSlot === "play"
+                        ? "Play & Bonding"
+                        : `${timeSlot.charAt(0).toUpperCase() + timeSlot.slice(1)} Routine`}
+                    </Text>
+                    {acts.map((activity, idx) => (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[
+                          styles.activityRow,
+                          { backgroundColor: completedToday.includes(`daily-${timeSlot}-${activity}`) ? colors.borderColor + '20' : '#ffffff' }
+                        ]}
+                        onPress={() => toggleDailyActivity(timeSlot, activity)}
+                        activeOpacity={0.8}
+                      >
+                        {completedToday.includes(`daily-${timeSlot}-${activity}`) ? (
+                          <MaterialCommunityIcons 
+                            name="checkbox-marked-circle" 
+                            color={colors.iconColor} 
+                            size={22} 
+                          />
+                        ) : (
+                          <MaterialCommunityIcons 
+                            name="checkbox-blank-circle-outline" 
+                            color="#9ca3af" 
+                            size={22} 
+                          />
+                        )}
+                        <Text
+                          style={[
+                            styles.activityText,
+                            { color: colors.textColor },
+                            completedToday.includes(`daily-${timeSlot}-${activity}`) &&
+                              styles.activityCompleted
+                          ]}
+                        >
+                          {activity}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })}
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  <Feather name="star" size={18} color="#eab308" /> Week {currentWeek} Focus
+                </Text>
+                {(weeklyPlans[currentWeek] || []).map((activity, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.activityRow}
+                    onPress={() => toggleActivity(currentWeek, activity)}
+                    activeOpacity={0.8}
+                  >
+                    {completedActivities.includes(`${currentWeek}-${activity}`) ? (
+                      <MaterialCommunityIcons name="checkbox-marked-circle" color="#22c55e" size={20} />
+                    ) : (
+                      <MaterialCommunityIcons name="checkbox-blank-circle-outline" color="#9ca3af" size={20} />
+                    )}
+                    <Text
+                      style={[
+                        styles.activityText,
+                        completedActivities.includes(`${currentWeek}-${activity}`) &&
+                          styles.activityCompleted
+                      ]}
+                    >
+                      {activity}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  <Feather name="book-open" size={18} /> Today's Notes
+                </Text>
+                <TextInput
+                  style={styles.noteInput}
+                  placeholder="Add a note about today's training..."
+                  value={dailyNotes[selectedDate] || ""}
+                  onChangeText={text => addNote(selectedDate, text)}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              <SmartTips 
+                dogBreed={dogBreed} 
+                currentWeek={currentWeek} 
+                completionRate={completionRate}
+              />
+
+              <StreakCounter currentStreak={currentStreak} bestStreak={bestStreak} />
+            </View>
+          )}
+
+          {/* ADDITIONAL VIEW MODES LIKE "weekly", "progress", "achievements", "family", "notes" 
+            would be coded here similarly as in above examples for "daily"
+          */}
+
+        </ScrollView>
+
+        {/* Quick Actions Floating Button */}
+        <QuickActions 
+          onAddNote={handleQuickAddNote}
+          onTakePhoto={handleQuickTakePhoto}
+          onMarkComplete={handleQuickMarkComplete}
+        />
+
+        {/* Sync indicator */}
+        {syncing && (
+          <View style={styles.syncIndicator}>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={styles.syncText}>Syncing...</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Dog edit modal */}
+      <Modal visible={editDogModal} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setEditDogModal(false)}>
+              <Feather name="x" size={24} color="#6b7280" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Edit Dog Info</Text>
+            <TouchableOpacity onPress={saveDogInfo}>
+              <Text style={styles.modalSave}>Save</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.modalSection}>
+              <Text style={styles.modalLabel}>Dog Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editDogName}
+                onChangeText={setEditDogName}
+                placeholder="Dog Name"
+              />
+            </View>
+            <View style={styles.modalSection}>
+              <Text style={styles.modalLabel}>Breed</Text>
+              <RNPickerSelect
+                onValueChange={value => setEditDogBreed(value)}
+                value={editDogBreed}
+                placeholder={{ label: "Select Dog Breed...", value: "" }}
+                items={[
+                  ...commonUKBreeds.map(breed => ({ label: breed, value: breed })),
+                  { label: "Other", value: "Other" }
+                ]}
+                style={{
+                  inputIOS: styles.modalPickerInput,
+                  inputAndroid: styles.modalPickerInput
+                }}
+              />
+              {editDogBreed === "Other" && (
+                <TextInput
+                  style={[styles.modalInput, styles.modalInputMarginTop]}
+                  value={editDogBreedOther}
+                  onChangeText={setEditDogBreedOther}
+                  placeholder="Specify breed"
+                />
+              )}
+            </View>
+            <View style={styles.modalSection}>
+              <Text style={styles.modalLabel}>Date of Birth (YYYY-MM-DD)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editDogDob}
+                onChangeText={setEditDogDob}
+                placeholder="YYYY-MM-DD"
+                keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"}
+                maxLength={10}
+              />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Quick Note Modal */}
+      <Modal visible={showQuickNote} animationType="slide" transparent={true}>
+        <View style={styles.quickNoteOverlay}>
+          <View style={styles.quickNoteModal}>
+            <View style={styles.quickNoteHeader}>
+              <Text style={styles.quickNoteTitle}>Quick Note</Text>
+              <TouchableOpacity onPress={() => setShowQuickNote(false)}>
+                <Feather name="x" size={20} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.quickNoteInput}
+              placeholder="Add a quick training note..."
+              value={quickNoteText}
+              onChangeText={setQuickNoteText}
+              multiline
+              numberOfLines={4}
+              autoFocus
+            />
+            <View style={styles.quickNoteActions}>
+              <TouchableOpacity 
+                style={styles.quickNoteCancel}
+                onPress={() => setShowQuickNote(false)}
+              >
+                <Text style={styles.quickNoteCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.quickNoteSave}
+                onPress={handleQuickNoteSubmit}
+              >
+                <Text style={styles.quickNoteSaveText}>Save Note</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+// ========== MAIN EXPORT WITH ERROR BOUNDARY ==========
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <MainApp />
+      </ErrorBoundary>
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f0f9ff"
+  },
+  mainContent: {
+    flex: 1,
+    backgroundColor: "#f0f9ff"
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 100
+  },
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f0f9ff"
+  },
+  mainContent: {
+    flex: 1,
+    backgroundColor: "#f0f9ff"
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 100
+  },
+  headerContainer: {
+    marginBottom: 20,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: "#1e40af",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#e0f2fe"
+  },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12
+  },
+  dogInfo: {
+    flex: 1,
+    position: "relative"
+  },
+  editButton: {
+    position: "absolute",
+    top: -4,
+    right: 0,
+    zIndex: 1,
+    padding: 8,
+    backgroundColor: "#f0f9ff",
+    borderRadius: 20,
+    shadowColor: "#1e40af",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2
+  },
+  dogName: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginRight: 30,
+    textShadowColor: "#94a3b8",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2
+  },
+  dogDetails: {
+    fontSize: 15,
+    color: "#475569",
+    marginTop: 4,
+    fontWeight: "500"
+  },
+  dateTimeContainer: {
+    alignItems: "flex-end",
+    backgroundColor: "#f1f5f9",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0"
+  },
+  currentDate: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1e293b"
+  },
+  currentTime: {
+    fontSize: 14,
+    color: "#64748b",
+    marginTop: 2,
+    fontWeight: "500"
+  },
+  switchFamilyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f0f9ff",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  switchFamilyText: {
+    color: "#2563eb",
+    fontSize: 14,
+    marginLeft: 6,
+    fontWeight: "500"
+  },
+  headerSyncBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f0f9ff",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8
+  },
+  headerSyncText: {
+    color: "#2563eb",
+    fontSize: 14,
+    marginLeft: 6,
+    fontWeight: "500"
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fef2f2",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: "flex-start"
+  },
+  logoutText: {
+    color: "#ef4444",
+    fontSize: 14,
+    marginLeft: 6,
+    fontWeight: "500"
+  },
+  navigationContainer: {
+    flexDirection: "row",
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 6,
+    marginBottom: 20,
+    shadowColor: "#1e40af",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#e0f2fe"
+  },
+  navTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    marginHorizontal: 2
+  },
+  navTabActive: {
+    backgroundColor: "#3b82f6",
+    shadowColor: "#1e40af",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  progressContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#059669",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#d1fae5"
+  },
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: "#f0fdf4"
+  },
+  progressTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginLeft: 12,
+    textShadowColor: "#94a3b8",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1
+  },
+  progressStats: {
+    alignItems: "center"
+  },
+  progressPercent: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#3b82f6"
+  },
+  section: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#64748b",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#f1f5f9"
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: "#e2e8f0"
+  },
+  timeSlotContainer: {
+    backgroundColor: "#fefce8",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#eab308",
+    shadowColor: "#eab308",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2
+  },
+  timeSlotTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#713f12",
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  activityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    marginVertical: 2,
+    backgroundColor: "#fafafa",
+    borderWidth: 1,
+    borderColor: "#e5e7eb"
+  },
+  activityText: {
+    fontSize: 16,
+    color: "#374151",
+    marginLeft: 12,
+    flex: 1,
+    fontWeight: "500"
+  },
+  activityCompleted: {
+    textDecorationLine: "line-through",
+    color: "#9ca3af"
+  },
+  stageIndicator: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: "#64748b",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1
+  },
+  stageText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1e293b",
+    textAlign: "center"
+  },
+  overviewStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8
+  },
+  statCard: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    padding: 20,
+    borderRadius: 16,
+    marginHorizontal: 6,
+    shadowColor: "#475569",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "#e2e8f0"
+  },
+  statNumber: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#3b82f6",
+    textShadowColor: "#93c5fd",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 6,
+    textAlign: "center",
+    fontWeight: "600"
+  },
+  streakContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    shadowColor: "#f59e0b",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#fef3c7"
+  },
+  streakItem: {
+    alignItems: "center",
+    backgroundColor: "#fffbeb",
+    padding: 16,
+    borderRadius: 12,
+    minWidth: 100,
+    borderWidth: 1,
+    borderColor: "#fed7aa"
+  },
+  streakNumber: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#92400e",
+    marginTop: 8,
+    textShadowColor: "#fed7aa",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2
+  },
+  streakLabel: {
+    fontSize: 12,
+    color: "#92400e",
+    marginTop: 6,
+    fontWeight: "600",
+    textAlign: "center"
+  },
+  calendar: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#e0e7ff"
+  },
+  calendarTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: 20,
+    textAlign: "center",
+    textShadowColor: "#94a3b8",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1
+  },
+  weekDays: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 8
+  },
+  weekDayText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6b7280",
+    width: 32,
+    textAlign: "center"
+  },
+  daysGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap"
+  },
+  dayCell: {
+    width: "14.28%",
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 10,
+    marginVertical: 2,
+    borderWidth: 1,
+    borderColor: "#e5e7eb"
+  },
+  completedDay: {
+    backgroundColor: "#10b981",
+    shadowColor: "#10b981",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  selectedDay: {
+    backgroundColor: "#3b82f6",
+    shadowColor: "#3b82f6",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  dayText: {
+    fontSize: 14,
+    color: "#374151"
+  },
+  completedDayText: {
+    color: "#fff",
+    fontWeight: "600"
+  },
+  selectedDayText: {
+    color: "#fff",
+    fontWeight: "600"
+  },
+  tipsContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#8b5cf6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "#ede9fe"
+  },
+  tipsHeader: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: 16,
+    textShadowColor: "#94a3b8",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1
+  },
+  tipCard: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#64748b",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: "#8b5cf6"
+  },
+  tipHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10
+  },
+  tipTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginLeft: 10
+  },
+  tipContent: {
+    fontSize: 15,
+    color: "#475569",
+    lineHeight: 22,
+    fontWeight: "500"
+  },
+  photoContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2
+  },
+  photoTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 12
+  },
+  cameraButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+    borderWidth: 2,
+    borderColor: "#e5e7eb",
+    borderStyle: "dashed",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12
+  },
+  cameraButtonText: {
+    fontSize: 14,
+    color: "#2563eb",
+    marginLeft: 8,
+    fontWeight: "500"
+  },
+  photosGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8
+  },
+  photo: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 8,
+    marginBottom: 8
+  },
+  quickActionsContainer: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    alignItems: "center"
+  },
+  actionButton: {
+    position: "absolute",
+    bottom: 0,
+    right: 0
+  },
+  actionButtonInner: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8
+  },
+  mainButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#2563eb",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5
+  },
+  achievementsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between"
+  },
+  achievementBadge: {
+    width: "48%",
+    backgroundColor: "#f8fafc",
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    marginBottom: 16,
+    shadowColor: "#64748b",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: "#e2e8f0"
+  },
+  achievementUnlocked: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#f59e0b",
+    shadowColor: "#f59e0b",
+    shadowOpacity: 0.25
+  },
+  achievementTitle: {
+    fontSize: 14,
+    color: "#9ca3af",
+    textAlign: "center",
+    marginTop: 8,
+    fontWeight: "700"
+  },
+  achievementTitleUnlocked: {
+    color: "#92400e"
+  },
+  achievementDescription: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 2
+  },
+  achievementDescriptionUnlocked: {
+    color: "#92400e"
+  },
+  achievementStats: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0"
+  },
+  achievementStatsTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8
+  },
+  achievementStatsText: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 8
+  },
+  weekHistoryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12
+  },
+  weekHistoryTitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#374151",
+    width: 60
+  },
+  progressBarContainer: {
+    flex: 1,
+    height: 8,
+    backgroundColor: "#e5e7eb",
+    borderRadius: 4,
+    marginHorizontal: 12
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: "#22c55e",
+    borderRadius: 4
+  },
+  weekHistoryPercent: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#374151",
+    width: 40,
+    textAlign: "right"
+  },
+  familyMemberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6"
+  },
+  familyEditContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1
+  },
+  familyEditInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  familyMemberName: {
+    fontSize: 16,
+    color: "#374151",
+    flex: 1
+  },
+  familyActions: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  familyActionButton: {
+    padding: 8,
+    marginLeft: 4
+  },
+  addFamilyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6"
+  },
+  addFamilyInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  addFamilyButton: {
+    padding: 8,
+    marginLeft: 8
+  },
+  addNoteContainer: {
+    flexDirection: "row",
+    marginBottom: 16
+  },
+  addNoteInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    textAlignVertical: "top"
+  },
+  addNoteButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  notesContainer: {
+    marginTop: 8
+  },
+  noteItem: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    position: "relative"
+  },
+  noteHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8
+  },
+  noteAuthor: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2563eb"
+  },
+  noteTimestamp: {
+    fontSize: 12,
+    color: "#6b7280"
+  },
+  noteText: {
+    fontSize: 16,
+    color: "#374151",
+    lineHeight: 22
+  },
+  noteEdited: {
+    fontSize: 12,
+    color: "#9ca3af",
+    fontStyle: "italic",
+    marginTop: 4
+  },
+  noteEditIcon: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    padding: 4
+  },
+  noteEditContainer: {
+    marginTop: 8
+  },
+  noteEditInput: {
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    marginBottom: 8,
+    textAlignVertical: "top"
+  },
+  noteEditActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end"
+  },
+  noteEditButton: {
+    padding: 8,
+    marginLeft: 8
+  },
+  noNotesText: {
+    fontSize: 16,
+    color: "#9ca3af",
+    textAlign: "center",
+    fontStyle: "italic",
+    paddingVertical: 20
+  },
+  notesLoader: {
+    marginVertical: 20
+  },
+  noteInput: {
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    textAlignVertical: "top"
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#f9fafb"
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    backgroundColor: "#fff"
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111827"
+  },
+  modalSave: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2563eb"
+  },
+  modalContent: {
+    flex: 1,
+    padding: 16
+  },
+  modalSection: {
+    marginBottom: 20
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#374151",
+    marginBottom: 8
+  },
+  modalInput: {
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#fff"
+  },
+  modalInputMarginTop: {
+    marginTop: 8
+  },
+  modalPickerInput: {
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#fff"
+  },
+  quickNoteOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20
+  },
+  quickNoteModal: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    width: "100%",
+    maxWidth: 400
+  },
+  quickNoteHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8
+  },
+  quickNoteTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 16,
+    textAlign: "center"
+  },
+  quickNoteInput: {
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
+    textAlignVertical: "top",
+    minHeight: 100
+  },
+  quickNoteActions: {
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  quickNoteCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    marginRight: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d1d5db"
+  },
+  quickNoteCancelText: {
+    fontSize: 16,
+    color: "#6b7280",
+    textAlign: "center",
+    fontWeight: "500"
+  },
+  quickNoteSave: {
+    flex: 1,
+    paddingVertical: 12,
+    marginLeft: 8,
+    borderRadius: 8,
+    backgroundColor: "#2563eb"
+  },
+  quickNoteSaveText: {
+    fontSize: 16,
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "600"
+  },
+  setupContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+    backgroundColor: "#f9fafb"
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#111827",
+    marginBottom: 16,
+    textAlign: "center"
+  },
+  setupText: {
+    fontSize: 16,
+    color: "#6b7280",
+    textAlign: "center",
+    marginBottom: 12,
+    lineHeight: 24
+  },
+  setupSubtext: {
+    fontSize: 14,
+    color: "#9ca3af",
+    textAlign: "center",
+    marginBottom: 32,
+    lineHeight: 20
+  },
+  setupInput: {
+    width: "100%",
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    backgroundColor: "#fff"
+  },
+  disabledInput: {
+    backgroundColor: "#f3f4f6",
+    color: "#9ca3af"
+  },
+  setupButton: {
+    width: "100%",
+    backgroundColor: "#2563eb",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center"
+  },
+  setupButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff"
+  },
+  pickerInput: {
+    fontSize: 16,
+    color: "#374151",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 16,
+    backgroundColor: "#fff"
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f9fafb"
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#6b7280",
+    marginTop: 12
+  },
+  syncIndicator: {
+    position: "absolute",
+    bottom: 100,
+    right: 20,
+    backgroundColor: "#374151",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5
+  },
+  syncText: {
+    color: "#fff",
+    fontSize: 12,
+    marginLeft: 6
+  },
+  offlineBanner: {
+    backgroundColor: "#ef4444",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    marginBottom: 16,
+    borderRadius: 8
+  },
+  offlineText: {
+    color: "#fff",
+    fontSize: 14,
+    marginLeft: 8,
+    textAlign: "center"
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+    backgroundColor: "#f9fafb"
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#111827",
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: "center"
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#6b7280",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 24
+  },
+  errorButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12
+  },
+  errorButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff"
+  }
+});
