@@ -1,0 +1,4715 @@
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+  Platform,
+  Modal,
+  Image,
+  Animated,
+  Keyboard,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  Feather,
+  MaterialCommunityIcons,
+} from "@expo/vector-icons";
+import ConfettiCannon from "react-native-confetti-cannon";
+import NetInfo from "@react-native-community/netinfo";
+import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
+import RNPickerSelect from "react-native-picker-select";
+import * as Notifications from "expo-notifications";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+import Svg, { Circle, Path } from "react-native-svg";
+import firebase from "firebase/compat/app";
+import "firebase/compat/firestore";
+
+
+
+
+// ========== DOG TRAINING THEMED COLORS PALETTE ==========
+const dogThemeColors = {
+  primary: "#8B4513",           // Saddle Brown - warm and earthy
+  secondary: "#D2691E",         // Chocolate - friendly orange-brown
+  accent: "#DAA520",            // Goldenrod - golden retriever inspired
+  success: "#228B22",           // Forest Green - nature/outdoor training
+  warning: "#FF6347",           // Tomato - attention grabbing
+  light: "#FFF8DC",             // Cornsilk - warm cream background
+  lightAccent: "#F5DEB3",       // Wheat - subtle warm accent
+  darkText: "#2F1B14",          // Dark brown
+  mediumText: "#8B4513",        // Medium brown
+  cardBg: "#FFFAF0",            // Floral white - warm card background
+  pawPrint: "#CD853F",          // Peru - paw print color
+};
+
+// ========== FIREBASE CONFIG ==========
+const firebaseConfig = {
+  apiKey: "AIzaSyDPT2FZbLupAd9F_V1CB87i5CUl2oaULLg",
+  authDomain: "ludos-training-tracker.firebaseapp.com",
+  projectId: "ludos-training-tracker",
+  storageBucket: "ludos-training-tracker.appspot.com",
+  messagingSenderId: "599255592851",
+  appId: "1:599255592851:android:5c758bc134326f9b40c266",
+};
+
+let db;
+
+try {
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+
+  db = firebase.firestore();
+
+  if (Platform.OS === "android" || Platform.OS === "ios") {
+    db.enablePersistence({ synchronizeTabs: false }).catch(function (err) {
+      console.warn("Firestore persistence not available:", err.code);
+    });
+  }
+} catch (error) {
+  console.error("Firebase initialization failed:", error);
+}
+
+// ========== CONSTANTS & HELPERS ==========
+const APP_VERSION = "2.0.0 - Puppy Edition";
+const BUILD_DATE = "2025-06-13";
+const getCurrentDate = () => new Date().toISOString().slice(0, 10);
+const getCurrentTime = () => new Date().toTimeString().slice(0, 8);
+
+const commonUKBreeds = [
+  "🐕 Labrador Retriever",
+  "🐕‍🦺 Cocker Spaniel", 
+  "🐕 French Bulldog",
+  "🐕 Bulldog",
+  "🌭 Dachshund",
+  "🐕‍🦺 German Shepherd",
+  "🐕 Jack Russell Terrier",
+  "💪 Staffordshire Bull Terrier",
+  "🐕‍🦺 Border Collie",
+  "🐕 Golden Retriever",
+];
+
+const breedTips = {
+  "🐕 Labrador Retriever": [
+    "🏊‍♂️ Labs love water – include swimming in their routine!",
+    "🦴 They respond well to food rewards but watch their weight.",
+    "🎾 Labs are natural retrievers - use fetch games for training.",
+  ],
+  "🐕‍🦺 Cocker Spaniel": [
+    "⚡ Spaniels are energetic and need regular, varied exercise.",
+    "🧠 Mental stimulation is crucial for this clever breed.",
+    "🕵️ Use their hunting instincts with hide-and-seek games.",
+  ],
+  "🐕 French Bulldog": [
+    "🌡️ Short walks suit their breathing; avoid heat.",
+    "👥 They thrive on companionship and gentle training.",
+    "🏠 Focus on indoor activities during hot weather.",
+  ],
+  "🐕 Bulldog": [
+    "⏰ Keep sessions short and allow rest breaks.",
+    "🌡️ Monitor for overheating, especially in warm weather.",
+    "✨ Use positive reinforcement with patience.",
+  ],
+  "🌭 Dachshund": [
+    "🦴 Protect their back: avoid stairs and jumping.",
+    "⏱️ Short, positive training sessions work best.",
+    "🏠 Use ramps instead of stairs to protect their spine.",
+  ],
+  "🐕‍🦺 German Shepherd": [
+    "🏃‍♂️ GSDs need jobs: try agility or advanced obedience.",
+    "👥 Early and ongoing socialisation is key.",
+    "🧠 Challenge their intelligence with complex tasks.",
+  ],
+  "🐕 Jack Russell Terrier": [
+    "🧩 Channel their energy into games and puzzles.",
+    "📏 Consistent boundaries are essential.",
+    "🧠 Provide plenty of mental stimulation daily.",
+  ],
+  "💪 Staffordshire Bull Terrier": [
+    "✨ They excel with positive reinforcement.",
+    "🎮 Plenty of social play helps prevent boredom.",
+    "💪 Focus on building confidence through training.",
+  ],
+  "🐕‍🦺 Border Collie": [
+    "🏆 They thrive on advanced tricks and mental work.",
+    "📋 Provide daily tasks to keep them busy.",
+    "🏃‍♂️ Border Collies need both physical and mental exercise.",
+  ],
+  "🐕 Golden Retriever": [
+    "🎾 Retrievers love to carry and fetch – use this in games.",
+    "👥 Social, gentle training is most effective.",
+    "🏫 They excel in group training environments.",
+  ],
+ "Advanced Training": [
+    "🏆 Focus on consistency - advanced dogs need regular practice",
+    "🧠 Challenge their mind with complex puzzles and tasks",
+    "🎯 Set specific goals for each training session",
+    "⚡ Advanced dogs respond well to variable reward schedules",
+    "🎪 Incorporate trick chains and sequence training",
+    "🏃‍♂️ Use environmental challenges to build confidence",
+    "👥 Practice skills in different locations with distractions",
+    "🧘‍♂️ Include impulse control and patience exercises",
+  ],
+};
+
+const trainingStages = {
+  1: {
+    name: "🐶 Puppy Foundation (Weeks 1-4)",
+    range: "8-12 weeks",
+    color: "#E6F3E6",
+    borderColor: dogThemeColors.success,
+    textColor: "#0F4A0F",
+    emoji: "🐶",
+  },
+  2: {
+    name: "🎓 Basic Training (Weeks 5-16)", 
+    range: "12-16 weeks",
+    color: "#E6F0FF",
+    borderColor: dogThemeColors.primary,
+    textColor: "#1A365D",
+    emoji: "🎓",
+  },
+  3: {
+    name: "🏆 Advanced Skills (Weeks 17-26)",
+    range: "4-6 months", 
+    color: "#FFF0E6",
+    borderColor: dogThemeColors.accent,
+    textColor: "#744210",
+    emoji: "🏆",
+  },
+  4: {
+    name: "🐕‍🦺 Young Adult (Weeks 27-39)",
+    range: "6-9 months",
+    color: "#FFE6E6",
+    borderColor: dogThemeColors.warning,
+    textColor: "#7A1A1A",
+    emoji: "🐕‍🦺",
+  },
+  5: {
+    name: "🎯 Mature Dog (Weeks 40-52)",
+    range: "9-12 months",
+    color: "#F0E6FF",
+    borderColor: "#8B4FB3",
+    textColor: "#4A1A5A",
+    emoji: "🎯",
+  },
+};
+
+const timeSlotColors = {
+  morning: {
+    backgroundColor: "#FFFACD",
+    borderColor: dogThemeColors.accent,
+    iconColor: "#B8860B",
+    textColor: "#5D4E37",
+    emoji: "🌅",
+    title: "Morning Walk & Training"
+  },
+  midday: {
+    backgroundColor: "#E0F6FF",
+    borderColor: dogThemeColors.primary,
+    iconColor: dogThemeColors.primary,
+    textColor: dogThemeColors.darkText,
+    emoji: "☀️",
+    title: "Midday Activities"
+  },
+  evening: {
+    backgroundColor: "#E6E6FA",
+    borderColor: "#6A5ACD",
+    iconColor: "#483D8B",
+    textColor: "#2F2F4F",
+    emoji: "🌆",
+    title: "Evening Session"
+  },
+  play: {
+    backgroundColor: "#F0FFF0",
+    borderColor: dogThemeColors.success,
+    iconColor: "#228B22",
+    textColor: "#006400",
+    emoji: "🎾",
+    title: "Play & Bonding Time"
+  },
+};
+
+const weeklyPlans = {
+  1: ["🏠 Name recognition", "🏠 Crate training", "🚽 Potty training"],
+  2: ["🪑 Sit & Down", "👋 Handling paws/ears/mouth", "🦮 Intro to leash"],
+  3: ["🐕 Meet calm dogs", "🔊 New surfaces & sounds", "⏱️ Short training sessions"],
+  4: ["📢 Basic recall (indoors)", "🏠 Continue potty/crate", "🚶‍♂️ Social walk (carry if needed)"],
+  5: ["✋ Wait & Leave it", "🦮 Loose-leash walking", "🧩 Puzzle toy intro"],
+  6: ["⏸️ Sit-Stay & Down-Stay", "📢 Recall indoors", "🚗 Traffic & bike exposure"],
+  7: ["🪀 Tug with drop-it", "🔍 Find-it game", "🔊 New sounds/social areas"],
+  8: ["📚 Reinforce all basics", "🧩 Puzzle time", "🏠 Crate review"],
+  9: ["📢 Recall w/ distractions", "⏸️ Advanced stays", "🎯 Marker word training"],
+  10: ["📍 Place command", "🧩 Puzzle toy advanced", "🔄 Spin trick"],
+  11: ["👃 Scent games", "🤝 Shake trick", "📚 Review leash & crate"],
+  12: ["🙇‍♂️ Bow trick", "🎯 New distractions", "🎯 Clicker practice"],
+  13: ["🎯 Mix tricks: combo day", "🥾 Trail walk intro", "😌 Social calm practice"],
+  14: ["⏱️ Stays with duration", "🦮 Heel in quiet area", "🥣 Slow feeder puzzle"],
+  15: ["🎯 Clicker games", "🎮 Play with purpose", "📍 Place & Stay combo"],
+  16: ["☕ Dog-friendly cafe visit", "📢 New location recall", "🪀 Tug with control"],
+  // ADVANCED TRAINING PHASE (Weeks 17-26)
+  17: ["🎯 Advanced recall training", "🚶‍♂️ Off-leash walking prep", "🧠 Complex puzzle solving"],
+  18: ["🏃‍♂️ Agility course basics", "👥 Dog park socialization", "🎪 Trick combinations"],
+  19: ["🔍 Advanced scent work", "⏰ Extended stay commands", "🚗 Car travel training"],
+  20: ["🎾 Fetch with commands", "🧘‍♂️ Impulse control exercises", "🏠 Boundary training"],
+  21: ["🦮 Service dog basics", "📞 Response to name from distance", "🎯 Target training"],
+  22: ["🌟 Show off skills", "👨‍👩‍👧‍👦 Family obedience", "🎪 Performance tricks"],
+  23: ["🏃‍♂️ Running companion training", "🦴 Advanced food puzzles", "📐 Precision commands"],
+  24: ["🚶‍♂️ Urban environment skills", "🔊 Noise desensitization", "🎯 Distance commands"],
+  25: ["🏆 Competition preparation", "🧠 Problem-solving tasks", "⚡ Quick response training"],
+  26: ["🎪 Advanced trick mastery", "🦮 Public access skills", "📚 Skills assessment"],
+
+  // YOUNG ADULT PHASE (Weeks 27-39)
+  27: ["🐕‍🦺 Adult dog responsibilities", "🏠 Household management", "👥 Leadership training"],
+  28: ["🎯 Precision obedience", "🏃‍♂️ Exercise routines", "🧠 Mental stimulation games"],
+  29: ["🦮 Advanced leash skills", "🏞️ Outdoor adventures", "🎪 Entertainment tricks"],
+  30: ["👥 Social etiquette", "🏠 Home alone training", "🔍 Search and find games"],
+  31: ["🏆 Skill refinement", "🚗 Travel preparation", "📚 Knowledge consolidation"],
+  32: ["🎾 Sport training basics", "🧘‍♂️ Relaxation techniques", "🎯 Focus exercises"],
+  33: ["🏃‍♂️ Fitness training", "🧠 Advanced puzzles", "👨‍👩‍👧‍👦 Family integration"],
+  34: ["🦮 Therapy dog prep", "💼 Work environment skills", "🎪 Public demonstrations"],
+  35: ["🏞️ Nature skills", "🔊 Sound training", "⚡ Emergency commands"],
+  36: ["🎯 Specialized training", "🏠 Property protection", "📐 Precise positioning"],
+  37: ["🧠 Intelligence tests", "🎾 Advanced games", "👥 Stranger interaction"],
+  38: ["🏆 Skill competitions", "🚶‍♂️ Perfect heel", "🔍 Detection training"],
+  39: ["🎪 Master performer", "🦮 Guide dog skills", "📚 Complete assessment"],
+
+  // MATURE DOG PHASE (Weeks 40-52)
+  40: ["🐕 Mature dog skills", "🏠 Household guardian", "👥 Pack leadership"],
+  41: ["🎯 Expert obedience", "🏃‍♂️ Endurance training", "🧠 Complex problems"],
+  42: ["🦮 Professional skills", "🎪 Entertainment mastery", "🔍 Expert searching"],
+  43: ["🏆 Champion training", "🚗 Travel expert", "📚 Skill maintenance"],
+  44: ["👥 Social ambassador", "🏞️ Outdoor expert", "🎾 Game master"],
+  45: ["🧘‍♂️ Zen training", "💼 Working dog skills", "⚡ Instant response"],
+  46: ["🎯 Precision master", "🏠 Home management", "🔊 Communication expert"],
+  47: ["🧠 Genius level tasks", "🎪 Performance artist", "👨‍👩‍👧‍👦 Family cornerstone"],
+  48: ["🏆 Award worthy skills", "🦮 Service excellence", "📐 Perfect execution"],
+  49: ["🎾 Lifetime athlete", "🔍 Detection expert", "🏞️ Adventure companion"],
+  50: ["🐕‍🦺 Senior preparation", "👥 Wisdom sharing", "🧘‍♂️ Peaceful mastery"],
+  51: ["🏠 Legacy training", "📚 Knowledge transfer", "🎯 Lifetime achievement"],
+  52: ["🎉 One year celebration", "🏆 Master graduate", "💝 Lifetime companion"],
+};
+
+
+const dailyRoutine = {
+  morning: ["🚽 Potty break", "🍽️ Breakfast", "📚 Basic commands review"],
+  midday: ["🎓 Primary training focus", "👥 Socialization/Exposure", "🧠 Mental stimulation"],
+  evening: ["📢 Recall practice", "📚 Command reinforcement", "😌 Cool down"],
+  play: ["🎮 Structured play", "❤️ Bonding time", "🏃‍♂️ Free play"],
+};
+
+const achievements = [
+  { id: "first_week", title: "🎉 First Week Graduate!", description: "Completed your first week of training", icon: "🐶" },
+  { id: "streak_7", title: "⚡ Week Warrior", description: "7 days training streak", icon: "🔥" },
+  { id: "streak_30", title: "🏆 Monthly Master", description: "30 days training streak", icon: "👑" },
+  { id: "all_daily", title: "⭐ Daily Champion", description: "Completed all daily tasks", icon: "🌟" },
+  { id: "photo_first", title: "📸 Picture Pawfect", description: "Added your first progress photo", icon: "📷" },
+  { id: "week_perfect", title: "💯 Perfect Week", description: "Completed all activities in a week", icon: "🎯" },
+  { id: "month_6", title: "🎯 6 Month Milestone", description: "Completed 26 weeks of training", icon: "🎯" },
+  { id: "year_complete", title: "🏆 Full Year Champion", description: "Completed all 52 weeks", icon: "👑" },
+  { id: "advanced_master", title: "🧠 Advanced Master", description: "Completed advanced training phase", icon: "🧠" },
+];
+
+const MAX_WEEKS = 52;
+
+// ========== CUSTOM DOG TRAINING THEMED ICONS ==========
+const DogHouseIcon = ({ size = 22, color = "#000" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M2 12l10-8 10 8v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8z"
+      stroke={color}
+      strokeWidth="2.5"
+      fill="none"
+    />
+    <Circle cx="12" cy="16" r="1.5" fill={color} />
+    <Path d="M8 12h8" stroke={color} strokeWidth="2" strokeLinecap="round"/>
+    <Circle cx="9" cy="8" r="0.5" fill={color} />
+    <Circle cx="15" cy="8" r="0.5" fill={color} />
+  </Svg>
+);
+
+const PawIcon = ({ size = 22, color = "#000" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="18" r="2.5" fill={color} />
+    <Circle cx="8" cy="14" r="1.8" fill={color} />
+    <Circle cx="16" cy="14" r="1.8" fill={color} />
+    <Circle cx="10" cy="10" r="1.2" fill={color} />
+    <Circle cx="14" cy="10" r="1.2" fill={color} />
+  </Svg>
+);
+
+const TrophyIcon = ({ size = 22, color = "#000" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18"
+      stroke={color}
+      strokeWidth="2.5"
+      strokeLinecap="round"
+    />
+    <Path
+      d="M6 9a6 6 0 0 0 12 0"
+      stroke={color}
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      fill={color}
+      fillOpacity="0.1"
+    />
+    <Path d="M12 15v6M8 21h8" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+    <Circle cx="12" cy="9" r="1" fill={color} />
+  </Svg>
+);
+
+const DogFamilyIcon = ({ size = 22, color = "#000" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="8" r="3.5" stroke={color} strokeWidth="2.5" fill="none"/>
+    <Path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke={color} strokeWidth="2.5"/>
+    <Path d="M9 5l-1.5-2.5M15 5l1.5-2.5" stroke={color} strokeWidth="2" strokeLinecap="round"/>
+    <Circle cx="5" cy="10" r="2.5" stroke={color} strokeWidth="2" fill="none"/>
+    <Circle cx="19" cy="10" r="2.5" stroke={color} strokeWidth="2" fill="none"/>
+    <Circle cx="9.5" cy="7" r="0.5" fill={color} />
+    <Circle cx="14.5" cy="7" r="0.5" fill={color} />
+  </Svg>
+);
+
+const CalendarPawIcon = ({ size = 22, color = "#000" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
+      stroke={color}
+      strokeWidth="2.5"
+      strokeLinecap="round"
+    />
+    <Circle cx="12" cy="16" r="1.5" fill={color} />
+    <Circle cx="10" cy="14" r="0.7" fill={color} />
+    <Circle cx="14" cy="14" r="0.7" fill={color} />
+    <Circle cx="11" cy="13" r="0.4" fill={color} />
+    <Circle cx="13" cy="13" r="0.4" fill={color} />
+  </Svg>
+);
+
+const NotesBoneIcon = ({ size = 22, color = "#000" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M3 4h18v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4z"
+      stroke={color}
+      strokeWidth="2.5"
+      fill="none"
+    />
+    <Path d="M8 8h8M8 12h6M8 16h4" stroke={color} strokeWidth="2" strokeLinecap="round"/>
+    <Path d="M16 14h2a1 1 0 1 1 0 2h-2a1 1 0 1 1 0-2z" stroke={color} strokeWidth="1.5" fill={color} fillOpacity="0.3"/>
+  </Svg>
+);
+
+// ========== UTILITY FUNCTIONS ==========
+const getCurrentStage = (week) => {
+  if (week <= 4) return 1;
+  if (week <= 16) return 2;
+  if (week <= 26) return 3;
+  if (week <= 39) return 4;
+  if (week <= 52) return 5;
+  return 5; // Cap at stage 5
+};
+
+const isValidDate = (dateString) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
+  const date = new Date(dateString + "T00:00:00.000Z");
+  return !isNaN(date) && dateString === date.toISOString().slice(0, 10);
+};
+
+const deepEqual = (obj1, obj2) => {
+  if (obj1 === obj2) return true;
+  if (obj1 == null || obj2 == null) return false;
+  if (typeof obj1 !== typeof obj2) return false;
+
+  if (typeof obj1 !== "object") return obj1 === obj2;
+
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+
+  if (keys1.length !== keys2.length) return false;
+
+  for (let key of keys1) {
+    if (!keys2.includes(key)) return false;
+    if (!deepEqual(obj1[key], obj2[key])) return false;
+  }
+
+  return true;
+};
+
+function calcDogAge(dob, weekOffset = 0, nowDate) {
+  if (!dob) return "";
+  const dobDate = new Date(dob);
+  if (isNaN(dobDate)) return "";
+  let baseTime = nowDate ? nowDate.getTime() : Date.now();
+  let virtualDate = new Date(dobDate.getTime() + weekOffset * 7 * 24 * 60 * 60 * 1000);
+  let diff = baseTime - virtualDate.getTime();
+  if (diff < 0) diff = 0;
+  let ageDate = new Date(diff);
+  let years = ageDate.getUTCFullYear() - 1970;
+  let months = ageDate.getUTCMonth();
+  let days = ageDate.getUTCDate() - 1;
+  let weeks = Math.floor(days / 7);
+  let ageStr = "";
+  if (years > 0) ageStr += `${years}y `;
+  if (months > 0) ageStr += `${months}m `;
+  if (weeks > 0) ageStr += `${weeks}w`;
+  if (!ageStr) ageStr = "🐶 New puppy";
+  return ageStr.trim();
+}
+
+const calculateStreak = (completedDailyByDate) => {
+  const dates = Object.keys(completedDailyByDate).sort().reverse();
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let tempStreak = 0;
+
+  const today = new Date();
+
+  for (let i = 0; i < dates.length; i++) {
+    const date = dates[i];
+    const completedTasks = completedDailyByDate[date] || [];
+    const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+      acts.map((activity) => `daily-${slot}-${activity}`)
+    );
+
+    const isComplete = completedTasks.length >= allDailyKeys.length * 0.8;
+
+    if (isComplete) {
+      tempStreak++;
+      if (i === 0 || dates[i - 1] === today.toISOString().slice(0, 10)) {
+        currentStreak = tempStreak;
+      }
+    } else {
+      bestStreak = Math.max(bestStreak, tempStreak);
+      tempStreak = 0;
+    }
+  }
+
+  bestStreak = Math.max(bestStreak, tempStreak);
+  return { currentStreak, bestStreak };
+};
+
+async function updateDogInfoStorageAndFirestore(familyId, name, breed, dob) {
+  await AsyncStorage.setItem("dogName", name);
+  await AsyncStorage.setItem("dogBreed", breed);
+  await AsyncStorage.setItem("dogDob", dob);
+  if (familyId) {
+    await db.collection("families").doc(familyId).set(
+      { dogName: name, dogBreed: breed, dogDob: dob },
+      { merge: true }
+    );
+  }
+}
+
+const showToast = (message, type = "info") => {
+  const titles = {
+    success: "Woof! Success! 🎉",
+    error: "Oops! 🐕",
+    info: "Pupdate! 🐶"
+  };
+  
+  Alert.alert(titles[type], message, [{ text: "Got it!" }]);
+};
+
+// NEW FUNCTION: Convert image to base64
+const imageToBase64 = async (uri) => {
+  try {
+    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+    return { base64, type: uri.split('.').pop() || 'jpg' };
+  } catch (error) {
+    console.error("Error converting image to base64:", error);
+    return null;
+  }
+};
+
+// ========== COMPONENTS ==========
+
+// Enhanced Progress Ring Component with Dog Theme
+const ProgressRing = ({ progress, size = 100, strokeWidth = 8 }) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDashoffset = circumference - progress * circumference;
+
+  // Create color based on progress with dog theme
+  const getColor = () => {
+    if (progress < 0.3) return dogThemeColors.warning;
+    if (progress < 0.7) return dogThemeColors.secondary;
+    return dogThemeColors.success;
+  };
+  
+  const color = getColor();
+
+  return (
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <Svg width={size} height={size}>
+        <Circle
+          stroke={dogThemeColors.lightAccent}
+          fill="transparent"
+          strokeWidth={strokeWidth - 2}
+          r={radius}
+          cx={size / 2}
+          cy={size / 2}
+        />
+        <Circle
+          stroke={color}
+          fill="transparent"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
+          r={radius}
+          cx={size / 2}
+          cy={size / 2}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <View style={{ 
+        position: "absolute", 
+        backgroundColor: dogThemeColors.cardBg, 
+        width: size - strokeWidth * 4,
+        height: size - strokeWidth * 4,
+        borderRadius: (size - strokeWidth * 4) / 2,
+        justifyContent: "center",
+        alignItems: "center",
+        shadowColor: dogThemeColors.primary,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        borderWidth: 2,
+        borderColor: color,
+      }}>
+        <Text style={{ fontSize: 16, fontWeight: "800", color: color }}>
+          {Math.round(progress * 100)}%
+        </Text>
+        <Text style={{ fontSize: 10, color: dogThemeColors.mediumText, marginTop: 2 }}>
+          🎯 Done
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Streak Counter Component with Dog Theme
+const StreakCounter = ({ currentStreak, bestStreak }) => {
+  return (
+    <View style={styles.streakContainer}>
+      <View style={styles.streakItem}>
+        <Text style={{ fontSize: 32 }}>🔥</Text>
+        <Text style={styles.streakNumber}>{currentStreak}</Text>
+        <Text style={styles.streakLabel}>Current Streak</Text>
+        <Text style={styles.streakSubLabel}>days training</Text>
+      </View>
+      <View style={styles.streakItem}>
+        <Text style={{ fontSize: 32 }}>🏆</Text>
+        <Text style={styles.streakNumber}>{bestStreak}</Text>
+        <Text style={styles.streakLabel}>Best Streak</Text>
+        <Text style={styles.streakSubLabel}>personal record</Text>
+      </View>
+    </View>
+  );
+};
+
+// Dog Avatar Component with Theme - UPDATED
+const DogAvatar = ({ dogName, dogBreed }) => {
+  const getBreedEmoji = (breed) => {
+    if (!breed) return "🐶";
+    if (breed.includes("Labrador")) return "🦮";
+    if (breed.includes("German Shepherd")) return "🐕‍🦺";
+    if (breed.includes("Bulldog")) return "🐕";
+    if (breed.includes("Border Collie")) return "🐕‍🦺";
+    if (breed.includes("Golden")) return "🦮";
+    return "🐶";
+  };
+  
+  return (
+    <View style={{
+      width: 50,
+      height: 50, 
+      borderRadius: 25,
+      backgroundColor: dogThemeColors.primary,
+      justifyContent: "center",
+      alignItems: "center",
+      marginRight: 12,
+      borderWidth: 2,
+      borderColor: dogThemeColors.accent,
+      shadowColor: dogThemeColors.primary,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
+      elevation: 4,
+    }}>
+      <Text style={{ fontSize: 20 }}>
+        {getBreedEmoji(dogBreed)}
+      </Text>
+    </View>
+  );
+};
+// Enhanced Training Calendar Component with Dog Theme
+const TrainingCalendar = ({
+  completedDailyByDate,
+  onDateSelect,
+  selectedDate,
+  calendarNotes,
+  onOpenNoteModal,
+  visibleNotes,
+  setVisibleNotes,
+}) => {
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+
+    const days = [];
+
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      days.push(day);
+    }
+
+    return days;
+  };
+
+  const formatDate = (day) => {
+    if (!day) return null;
+    const date = new Date();
+    date.setDate(day);
+    return date.toISOString().slice(0, 10);
+  };
+
+  // Double-click logic
+  const lastClickRef = useRef({});
+  const DOUBLE_CLICK_DELAY = 350;
+
+  const handleDateClick = (day) => {
+    const dateStr = formatDate(day);
+    if (!dateStr) return;
+    const now = Date.now();
+    if (
+      lastClickRef.current[dateStr] &&
+      now - lastClickRef.current[dateStr] < DOUBLE_CLICK_DELAY
+    ) {
+      // Double click
+      onOpenNoteModal(dateStr, calendarNotes?.[dateStr]?.text || "");
+      lastClickRef.current[dateStr] = 0;
+    } else {
+      // Single click: toggle note view if exists, or just select
+      if (calendarNotes?.[dateStr]?.text) {
+        setVisibleNotes((prev) => ({
+          ...prev,
+          [dateStr]: !prev[dateStr],
+        }));
+      } else {
+        onDateSelect(dateStr);
+      }
+      lastClickRef.current[dateStr] = now;
+    }
+  };
+
+  const days = getDaysInMonth(new Date());
+
+  const isCompleted = (day) => {
+    if (!day) return false;
+    const dateStr = formatDate(day);
+    const completed = completedDailyByDate[dateStr] || [];
+    const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+      acts.map((activity) => `daily-${slot}-${activity}`)
+    );
+    return completed.length >= allDailyKeys.length * 0.8;
+  };
+
+  const isSelected = (day) => {
+    if (!day) return false;
+    return formatDate(day) === selectedDate;
+  };
+
+  return (
+    <View style={styles.calendar}>
+      <Text style={styles.calendarTitle}>🗓️ Training Calendar</Text>
+      <Text style={styles.calendarSubtitle}>Double tap to add notes! 📝</Text>
+      <View style={styles.weekDays}>
+        {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => (
+          <Text key={index} style={styles.weekDayText}>
+            {day}
+          </Text>
+        ))}
+      </View>
+      <View style={styles.daysGrid}>
+        {days.map((day, index) => {
+          const dateStr = formatDate(day);
+          const hasNote = !!calendarNotes?.[dateStr]?.text;
+          const completed = isCompleted(day);
+          
+          return (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.dayCell,
+                completed && styles.completedDay,
+                isSelected(day) && styles.selectedDay,
+                hasNote && styles.noteDay,
+              ]}
+              onPress={() => handleDateClick(day)}
+              disabled={!day}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.dayText,
+                  completed && styles.completedDayText,
+                  isSelected(day) && styles.selectedDayText,
+                  hasNote && styles.noteDayText,
+                ]}
+              >
+                {day}
+              </Text>
+              {completed && (
+                <Text style={{ position: "absolute", bottom: 2, fontSize: 8 }}>🐾</Text>
+              )}
+              {hasNote && (
+                <Text style={{ position: "absolute", top: 2, right: 2, fontSize: 8 }}>📝</Text>
+              )}
+              {/* Show note popup if toggled */}
+              {visibleNotes?.[dateStr] && hasNote && (
+                <View style={styles.notePopup}>
+                  <Text style={styles.notePopupText}>{calendarNotes[dateStr]?.text}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Smart Tips Component with Dog Theme
+const SmartTips = ({ dogBreed, currentWeek, completionRate, recentActivities }) => {
+  const generateTips = () => {
+    const tips = [];
+
+    // Safely handle breed tips lookup
+    if (dogBreed) {
+      let breedTipsToUse = null;
+      
+      // Try exact match first
+      if (breedTips[dogBreed]) {
+        breedTipsToUse = breedTips[dogBreed];
+      } else {
+        // Try to find by removing emoji prefix
+        const cleanBreed = dogBreed.replace(/^[🐕🐕‍🦺🌭💪\u{1F400}-\u{1F9FF}]\s*/u, "").trim();
+        
+        // Look for partial matches in breed tips keys
+        const matchingKey = Object.keys(breedTips).find(key => 
+          key.toLowerCase().includes(cleanBreed.toLowerCase()) ||
+          cleanBreed.toLowerCase().includes(key.replace(/^[🐕🐕‍🦺🌭💪\u{1F400}-\u{1F9FF}]\s*/u, "").toLowerCase())
+        );
+        
+        if (matchingKey) {
+          breedTipsToUse = breedTips[matchingKey];
+        }
+      }
+      
+      if (breedTipsToUse && breedTipsToUse.length > 0) {
+        const cleanBreedName = dogBreed.replace(/^[🐕🐕‍🦺🌭💪\u{1F400}-\u{1F9FF}]\s*/u, "").trim();
+        tips.push({
+          type: "breed",
+          icon: "🐕",
+          title: `${cleanBreedName} Training Tip`,
+          content: breedTipsToUse[Math.floor(Math.random() * breedTipsToUse.length)],
+        });
+      }
+    }
+
+    // Advanced training tips for higher weeks
+    if (currentWeek >= 17 && breedTips["Advanced Training"]) {
+      tips.push({
+        type: "advanced",
+        icon: "🎯",
+        title: "Advanced Training Tip",
+        content: breedTips["Advanced Training"][Math.floor(Math.random() * breedTips["Advanced Training"].length)],
+      });
+    }
+
+    if (completionRate < 0.5) {
+      tips.push({
+        type: "motivation",
+        icon: "💪",
+        title: "Keep Going, You've Got This!",
+        content: "🏃‍♂️ Try shorter, more frequent training sessions. Even 5 minutes twice a day makes a tail-wagging difference!",
+      });
+    } else if (completionRate > 0.8) {
+      tips.push({
+        type: "achievement",
+        icon: "⭐",
+        title: "Amazing Progress!",
+        content: "🎾 You're doing pawsome! Consider adding some advanced tricks to keep your furry friend challenged.",
+      });
+    }
+
+    if (currentWeek <= 4) {
+      tips.push({
+        type: "foundation",
+        icon: "🏠",
+        title: "Building Strong Foundations",
+        content: "🍖 Focus on creating positive associations with training. Keep sessions short and always end on a high note!",
+      });
+    }
+
+    return tips.slice(0, 2);
+  };
+
+  const tips = generateTips();
+  return (
+    <View style={styles.tipsContainer}>
+      <Text style={styles.tipsHeader}>💡 Pawsome Training Tips</Text>
+      {tips.map((tip, index) => (
+        <View key={index} style={styles.tipCard}>
+          <View style={styles.tipHeader}>
+            <Text style={{ fontSize: 24 }}>{tip.icon}</Text>
+            <Text style={styles.tipTitle}>{tip.title}</Text>
+          </View>
+          <Text style={styles.tipContent}>{tip.content}</Text>
+        </View>
+      ))}
+    </View>
+  );
+};
+
+// Enhanced Photo Progress Component with Dog Theme
+const PhotoProgress = ({ week, photos, onPhotoAdded }) => {
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("📸 Camera Permission", "We need camera access to capture your pup's progress!");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      try {
+        const imageData = await imageToBase64(result.assets[0].uri);
+        
+        if (imageData) {
+          const newPhoto = {
+            uri: result.assets[0].uri,
+            base64: imageData.base64,
+            type: imageData.type,
+            timestamp: new Date().toISOString(),
+            week: week,
+          };
+          onPhotoAdded(newPhoto);
+          showToast("📸 Pawsome photo added!", "success");
+        } else {
+          showToast("Failed to process photo", "error");
+        }
+      } catch (error) {
+        console.error("Error taking photo:", error);
+        showToast("Failed to save photo", "error");
+      }
+    }
+  };
+
+  const weekPhotos = photos.filter((photo) => photo.week === week);
+
+  return (
+    <View style={styles.photoContainer}>
+      <Text style={styles.photoTitle}>📸 Progress Photos - Week {week}</Text>
+      <Text style={styles.photoSubtitle}>Capture your pup's training journey! 🐾</Text>
+
+      <TouchableOpacity style={styles.cameraButton} onPress={takePhoto} activeOpacity={0.7}>
+        <Text style={{ fontSize: 24, marginRight: 8 }}>📸</Text>
+        <Text style={styles.cameraButtonText}>Take Progress Photo</Text>
+      </TouchableOpacity>
+
+      <View style={styles.photosGrid}>
+        {weekPhotos.map((photo, index) => {
+          const source = photo.base64 
+            ? { uri: `data:image/${photo.type || 'jpeg'};base64,${photo.base64}` }
+            : { uri: photo.uri };
+            
+          return (
+            <View key={index} style={styles.photoWrapper}>
+              <Image source={source} style={styles.photo} />
+              <Text style={styles.photoDate}>
+                {new Date(photo.timestamp).toLocaleDateString()}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+// Enhanced Quick Actions Component with Dog Theme
+const QuickActions = ({ onAddNote, onTakePhoto, onMarkComplete }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [animation] = useState(new Animated.Value(0));
+
+  const toggleMenu = () => {
+    const toValue = isOpen ? 0 : 1;
+
+    Animated.timing(animation, {
+      toValue,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+
+    setIsOpen(!isOpen);
+  };
+
+  const actionButtons = [
+    {
+      icon: "📝",
+      action: onAddNote,
+      color: dogThemeColors.accent,
+      shadowColor: dogThemeColors.accent,
+      label: "Note"
+    },
+    {
+      icon: "📸",
+      action: onTakePhoto,
+      color: dogThemeColors.secondary,
+      shadowColor: dogThemeColors.secondary,
+      label: "Photo"
+    },
+    {
+      icon: "✅",
+      action: onMarkComplete,
+      color: dogThemeColors.success,
+      shadowColor: dogThemeColors.success,
+      label: "Check"
+    },
+  ];
+
+  return (
+    <View style={styles.quickActionsContainer}>
+      {isOpen && actionButtons.map((button, index) => (
+        <Animated.View
+          key={index}
+          style={[
+            styles.actionButton,
+            {
+              transform: [
+                {
+                  translateY: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, -(65 * (index + 1))],
+                  }),
+                },
+                {
+                  scale: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 1],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={[
+              styles.actionButtonInner,
+              {
+                backgroundColor: button.color,
+                shadowColor: button.shadowColor,
+              },
+            ]}
+            onPress={() => {
+              button.action();
+              toggleMenu();
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontSize: 20 }}>{button.icon}</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      ))}
+
+      <TouchableOpacity style={styles.mainButton} onPress={toggleMenu} activeOpacity={0.8}>
+        <Animated.View
+          style={{
+            transform: [
+              {
+                rotate: animation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ["0deg", "45deg"],
+                }),
+              },
+            ],
+          }}
+        >
+          <Text style={{ fontSize: 28, color: dogThemeColors.light }}>🐾</Text>
+        </Animated.View>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Enhanced Achievement Badge Component with Dog Theme
+const AchievementBadge = ({ achievement, unlocked }) => (
+  <View style={[styles.achievementBadge, unlocked && styles.achievementUnlocked]}>
+    <Text style={{ fontSize: 36, marginBottom: 8 }}>{achievement.icon}</Text>
+    <Text style={[styles.achievementTitle, unlocked && styles.achievementTitleUnlocked]}>
+      {achievement.title}
+    </Text>
+    <Text style={[styles.achievementDescription, unlocked && styles.achievementDescriptionUnlocked]}>
+      {achievement.description}
+    </Text>
+    {unlocked && (
+      <Text style={styles.achievementUnlockedText}>🎉 Unlocked!</Text>
+    )}
+  </View>
+);
+
+// ========== ERROR BOUNDARY ==========
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("App Error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={{ fontSize: 48 }}>🐕</Text>
+          <Text style={styles.errorTitle}>Oops! Something went wrong</Text>
+          <Text style={styles.errorText}>Don't worry, even the best-trained dogs have accidents!</Text>
+          <TouchableOpacity
+            style={styles.errorButton}
+            onPress={() => this.setState({ hasError: false })}
+          >
+            <Text style={styles.errorButtonText}>🔄 Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// ========== MAIN APP COMPONENT ==========
+function MainApp() {
+  const [isOffline, setIsOffline] = useState(false);
+
+  // Core state
+  const [familyId, setFamilyId] = useState(null);
+  const [dogName, setDogName] = useState(null);
+  const [dogBreed, setDogBreed] = useState(null);
+  const [dogDob, setDogDob] = useState(null);
+
+  // Input states
+  const [inputId, setInputId] = useState("");
+  const [inputDog, setInputDog] = useState("");
+  const [inputBreed, setInputBreed] = useState("");
+  const [inputBreedOther, setInputBreedOther] = useState("");
+  const [inputDob, setInputDob] = useState("");
+
+  // UI states
+  const [showDogInput, setShowDogInput] = useState(false);
+  const [familyDogLoading, setFamilyDogLoading] = useState(true);
+  const [checkingFamilyId, setCheckingFamilyId] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [manualSyncRequested, setManualSyncRequested] = useState(false);
+
+  // Edit modal states
+  const [editDogModal, setEditDogModal] = useState(false);
+  const [editDogName, setEditDogName] = useState("");
+  const [editDogBreed, setEditDogBreed] = useState("");
+  const [editDogDob, setEditDogDob] = useState("");
+  const [editDogBreedOther, setEditDogBreedOther] = useState("");
+
+  // App data states
+  const [currentWeek, setCurrentWeek] = useState(1);
+  const [completedActivities, setCompletedActivities] = useState([]);
+  const [dailyNotes, setDailyNotes] = useState({});
+  const [viewMode, setViewMode] = useState("daily");
+  const [selectedDate, setSelectedDate] = useState(() => getCurrentDate());
+  const [completedDailyByDate, setCompletedDailyByDate] = useState({});
+
+  // New feature states
+  const [progressPhotos, setProgressPhotos] = useState([]);
+  const [unlockedAchievements, setUnlockedAchievements] = useState([]);
+  const [quickNoteText, setQuickNoteText] = useState("");
+  const [showQuickNote, setShowQuickNote] = useState(false);
+
+  // Calendar notes feature states
+  const [calendarNotes, setCalendarNotes] = useState({});
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [currentNoteDate, setCurrentNoteDate] = useState(null);
+  const [noteInputText, setNoteInputText] = useState("");
+  const [visibleNotes, setVisibleNotes] = useState({});
+
+  // Family and notes states
+  const [family, setFamily] = useState([
+    { id: 1, name: "🏆 Primary Trainer", editing: false },
+    { id: 2, name: "👨‍👩‍👧‍👦 Family Member 2", editing: false },
+    { id: 3, name: "👨‍👩‍👧‍👦 Family Member 3", editing: false },
+  ]);
+  const [newFamilyName, setNewFamilyName] = useState("");
+  const [editFamilyName, setEditFamilyName] = useState({});
+  const [editingMemberId, setEditingMemberId] = useState(null);
+
+  const [sharedNotes, setSharedNotes] = useState([]);
+  const [newSharedNote, setNewSharedNote] = useState("");
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [editingNoteText, setEditingNoteText] = useState("");
+  const [currentUserName, setCurrentUserName] = useState("🐕 Wiewioreq");
+
+  // Celebration states
+  const [showDailyConfetti, setShowDailyConfetti] = useState(false);
+  const [showWeeklyConfetti, setShowWeeklyConfetti] = useState(false);
+  const [currentDogAge, setCurrentDogAge] = useState(() => calcDogAge(dogDob, 0, new Date()));
+
+  // Refs for cleanup and optimization
+  const syncTimeout = useRef();
+  const lastSyncedData = useRef({});
+  const dobInputRef = useRef(null);
+
+    // Add these with your other state declarations in MainApp function:
+  const [celebratedWeeks, setCelebratedWeeks] = useState([]);
+  const [celebratedDays, setCelebratedDays] = useState([]);
+
+  // ========== UPDATED NAVIGATION TABS WITH COMPLETE DOG TRAINING THEME ==========
+  const navigationTabs = [
+    { key: "daily", iconLib: "custom", iconName: "home", CustomIcon: DogHouseIcon, label: "🏠 Home" },
+    { key: "weekly", iconLib: "custom", iconName: "calendar", CustomIcon: CalendarPawIcon, label: "📅 Weekly" },
+    { key: "progress", iconLib: "custom", iconName: "paw", CustomIcon: PawIcon, label: "📈 Progress" },
+    { key: "notes", iconLib: "custom", iconName: "notes", CustomIcon: NotesBoneIcon, label: "📝 Notes" },
+    { key: "achievements", iconLib: "custom", iconName: "trophy", CustomIcon: TrophyIcon, label: "🏆 Awards" },
+    { key: "family", iconLib: "custom", iconName: "family", CustomIcon: DogFamilyIcon, label: "👨‍👩‍👧‍👦 Pack" }
+  ];
+
+  // Auto-delete notes for previous days
+  useEffect(() => {
+    const today = getCurrentDate();
+    let changed = false;
+    const newNotes = { ...calendarNotes };
+    Object.keys(newNotes).forEach(date => {
+      if (date < today) {
+        delete newNotes[date];
+        changed = true;
+      }
+    });
+    if (changed) {
+      setCalendarNotes(newNotes);
+      if (familyId) {
+        db.collection("families").doc(familyId).set({ calendarNotes: newNotes }, { merge: true });
+      }
+    }
+  }, [calendarNotes, familyId]);
+
+  // Modal open handler
+  const handleOpenNoteModal = useCallback((date, text = "") => {
+    setCurrentNoteDate(date);
+    setNoteInputText(text);
+    setShowNoteModal(true);
+  }, []);
+
+  // Modal save handler
+  const handleSaveNote = async () => {
+    if (noteInputText.trim()) {
+      const newNotes = {
+        ...calendarNotes,
+        [currentNoteDate]: { text: noteInputText.trim(), savedAt: Date.now() }
+      };
+      setCalendarNotes(newNotes);
+      setShowNoteModal(false);
+      setVisibleNotes((prev) => ({ ...prev, [currentNoteDate]: true }));
+      if (familyId) {
+        await db.collection("families").doc(familyId).set(
+          { calendarNotes: newNotes },
+          { merge: true }
+        );
+      }
+    } else {
+      setShowNoteModal(false);
+    }
+    Keyboard.dismiss();
+  };
+
+  // Setup notifications with dog theme
+  useEffect(() => {
+    const setupNotifications = async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== "granted" || !dogName) return;
+
+      await Notifications.cancelAllScheduledNotificationsAsync();
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `🌅 Good morning!`,
+          body: `Time for ${dogName}'s morning training session! 🐕`,
+          sound: true,
+        },
+        trigger: {
+          hour: 8,
+          minute: 0,
+          repeats: true,
+        },
+      });
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `🌙 Evening training time!`,
+          body: `Don't forget ${dogName}'s evening practice! 🎾`,
+          sound: true,
+        },
+        trigger: {
+          hour: 18,
+          minute: 0,
+          repeats: true,
+        },
+      });
+    };
+
+    if (dogName) {
+      setupNotifications();
+    }
+  }, [dogName]);
+
+  // Network status effect
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOffline(!state.isConnected);
+    });
+    NetInfo.fetch().then((state) => setIsOffline(!state.isConnected));
+    return () => unsubscribe();
+  }, []);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (syncTimeout.current) {
+        clearTimeout(syncTimeout.current);
+      }
+    };
+  }, []);
+
+  // Initial data loading with dog theme
+  useEffect(() => {
+    (async () => {
+      try {
+        const id = await AsyncStorage.getItem("familyId");
+        const dog = await AsyncStorage.getItem("dogName");
+        const breed = await AsyncStorage.getItem("dogBreed");
+        const dob = await AsyncStorage.getItem("dogDob");
+        const username = await AsyncStorage.getItem("memberName");
+        const photos = await AsyncStorage.getItem("progressPhotos");
+        const achievements = await AsyncStorage.getItem("unlockedAchievements");
+
+        if (id) setFamilyId(id);
+        if (dog) setDogName(dog);
+        if (breed) setDogBreed(breed);
+        if (dob) setDogDob(dob);
+        if (username) setCurrentUserName(username);
+        if (photos) setProgressPhotos(JSON.parse(photos));
+        if (achievements) setUnlockedAchievements(JSON.parse(achievements));
+      } catch (e) {
+        console.error("Error loading app data:", e);
+      }
+
+      try {
+        const cdbd = await AsyncStorage.getItem("completedDailyByDate");
+        if (cdbd) {
+          const parsedData = JSON.parse(cdbd);
+          setCompletedDailyByDate(parsedData);
+        }
+      } catch (e) {
+        console.error("Failed to parse completedDailyByDate:", e);
+      } finally {
+        setFamilyDogLoading(false);
+      }
+    })();
+  }, []);
+
+  // Set current user name in AsyncStorage when it changes
+  useEffect(() => {
+    if (currentUserName) {
+      AsyncStorage.setItem("memberName", currentUserName);
+    }
+  }, [currentUserName]);
+
+  // Save photos and achievements to AsyncStorage
+  useEffect(() => {
+    AsyncStorage.setItem("progressPhotos", JSON.stringify(progressPhotos));
+  }, [progressPhotos]);
+
+  useEffect(() => {
+    AsyncStorage.setItem("unlockedAchievements", JSON.stringify(unlockedAchievements));
+  }, [unlockedAchievements]);
+
+  // New manual sync function with dog theme
+  const forceSyncToFirebase = useCallback(async () => {
+    if (!familyId) {
+      showToast("🏠 No family pack set", "error");
+      return;
+    }
+    
+    try {
+      setSyncing(true);
+      setManualSyncRequested(true);
+      
+      const dataToSync = {
+        currentWeek,
+        completedActivities,
+        dailyNotes,
+        dogName,
+        dogBreed,
+        dogDob,
+        family,
+        sharedNotes,
+        completedDailyByDate,
+        progressPhotos,
+        unlockedAchievements,
+        calendarNotes,
+      };
+      
+      await db.collection("families").doc(familyId).set(dataToSync, { merge: true });
+      lastSyncedData.current = { ...dataToSync };
+      
+      // Also fetch the latest data
+      const docSnap = await db.collection("families").doc(familyId).get();
+      if (docSnap.exists) {
+        const data = docSnap.data();
+        
+        // Update with the latest data from Firestore
+        if (data.currentWeek !== undefined) setCurrentWeek(data.currentWeek);
+        if (data.completedActivities) setCompletedActivities(data.completedActivities);
+        if (data.dailyNotes) setDailyNotes(data.dailyNotes);
+        if (data.family) setFamily(data.family);
+        if (data.sharedNotes) setSharedNotes(data.sharedNotes);
+        if (data.dogName) setDogName(data.dogName);
+        if (data.dogBreed) setDogBreed(data.dogBreed);
+        if (data.dogDob) setDogDob(data.dogDob);
+        if (data.completedDailyByDate) setCompletedDailyByDate(data.completedDailyByDate);
+        if (data.progressPhotos) setProgressPhotos(data.progressPhotos);
+        if (data.unlockedAchievements) setUnlockedAchievements(data.unlockedAchievements);
+        if (data.calendarNotes) setCalendarNotes(data.calendarNotes);
+      }
+
+      showToast("🔄 Pack data synced successfully!", "success");
+      
+      // Save to AsyncStorage
+      await AsyncStorage.setItem("completedDailyByDate", JSON.stringify(completedDailyByDate));
+    } catch (e) {
+      console.error("Failed to force sync:", e);
+      showToast("🌐 Sync failed: " + e.message, "error");
+    } finally {
+      setSyncing(false);
+      setManualSyncRequested(false);
+    }
+  }, [
+    familyId, 
+    currentWeek, 
+    completedActivities, 
+    dailyNotes, 
+    dogName, 
+    dogBreed, 
+    dogDob, 
+    family, 
+    sharedNotes, 
+    completedDailyByDate, 
+    progressPhotos, 
+    unlockedAchievements, 
+    calendarNotes
+  ]);
+
+  // Optimized Firebase sync with deep comparison and dog theme
+  const syncToFirebase = useCallback(
+    async (data) => {
+      if (!familyId || !data) return;
+
+      if (deepEqual(lastSyncedData.current, data) && !manualSyncRequested) {
+        setSyncing(false);
+        return;
+      }
+
+      try {
+        setSyncing(true);
+        await db.collection("families").doc(familyId).set(data, { merge: true });
+        lastSyncedData.current = { ...data };
+        console.log("🐕 Pack data synced to Firebase successfully");
+      } catch (e) {
+        console.error("Failed to sync to Firebase:", e);
+        if (!isOffline) {
+          Alert.alert("🌐 Sync Error", "Failed to save changes to your pack. Please check your connection! 📶");
+        }
+      } finally {
+        setSyncing(false);
+        setManualSyncRequested(false);
+      }
+    },
+    [familyId, isOffline, manualSyncRequested]
+  );
+
+  // Consolidated debounced sync effect
+  useEffect(() => {
+    if (loading || !familyId) return;
+
+    const dataToSync = {
+      currentWeek,
+      completedActivities,
+      dailyNotes,
+      dogName,
+      dogBreed,
+      dogDob,
+      family,
+      sharedNotes,
+      completedDailyByDate,
+      progressPhotos,
+      unlockedAchievements,
+      calendarNotes,
+    };
+
+    if (syncTimeout.current) {
+      clearTimeout(syncTimeout.current);
+    }
+
+    syncTimeout.current = setTimeout(() => {
+      syncToFirebase(dataToSync);
+      AsyncStorage.setItem("completedDailyByDate", JSON.stringify(completedDailyByDate)).catch((e) =>
+        console.error("AsyncStorage save error", e)
+      );
+    }, manualSyncRequested ? 0 : 500);
+  }, [
+    currentWeek,
+    completedActivities,
+    dailyNotes,
+    dogName,
+    dogBreed,
+    dogDob,
+    family,
+    sharedNotes,
+    completedDailyByDate,
+    progressPhotos,
+    unlockedAchievements,
+    calendarNotes,
+    syncToFirebase,
+    loading,
+    familyId,
+    manualSyncRequested,
+  ]);
+
+// Firebase snapshot listener with optimized updates and dog theme
+useEffect(() => {
+  if (!familyId) return;
+
+  setLoading(true);
+  setNotesLoading(true);
+
+  const unsubscribe = db
+    .collection("families")
+    .doc(familyId)
+    .onSnapshot(
+      (docSnap) => {
+        if (docSnap.exists) {
+          const data = docSnap.data();
+
+          if (data.currentWeek !== undefined && data.currentWeek !== currentWeek) {
+            setCurrentWeek(data.currentWeek);
+          }
+
+          if (data.completedActivities && !deepEqual(data.completedActivities, completedActivities)) {
+            setCompletedActivities(data.completedActivities);
+          }
+
+          if (data.dailyNotes && !deepEqual(data.dailyNotes, dailyNotes)) {
+            setDailyNotes(data.dailyNotes);
+          }
+
+          if (data.family && !deepEqual(data.family, family)) {
+            setFamily(data.family);
+          }
+
+          if (data.sharedNotes && !deepEqual(data.sharedNotes, sharedNotes)) {
+            setSharedNotes(data.sharedNotes);
+          }
+
+          if (data.dogName && data.dogName !== dogName) {
+            setDogName(data.dogName);
+            AsyncStorage.setItem("dogName", data.dogName);
+          }
+
+          if (data.dogBreed && data.dogBreed !== dogBreed) {
+            setDogBreed(data.dogBreed);
+            AsyncStorage.setItem("dogBreed", data.dogBreed);
+          }
+
+          if (data.dogDob && data.dogDob !== dogDob) {
+            setDogDob(data.dogDob);
+            AsyncStorage.setItem("dogDob", data.dogDob);
+          }
+
+          if (data.completedDailyByDate && !deepEqual(data.completedDailyByDate, completedDailyByDate)) {
+            setCompletedDailyByDate(data.completedDailyByDate);
+            AsyncStorage.setItem("completedDailyByDate", JSON.stringify(data.completedDailyByDate)).catch((e) =>
+              console.error("AsyncStorage save error", e)
+            );
+          }
+
+          if (data.progressPhotos && !deepEqual(data.progressPhotos, progressPhotos)) {
+            setProgressPhotos(data.progressPhotos);
+          }
+
+          if (data.unlockedAchievements && !deepEqual(data.unlockedAchievements, unlockedAchievements)) {
+            setUnlockedAchievements(data.unlockedAchievements);
+          }
+
+          if (data.calendarNotes && !deepEqual(data.calendarNotes, calendarNotes)) {
+            setCalendarNotes(data.calendarNotes);
+          }
+
+          lastSyncedData.current = {
+            currentWeek: data.currentWeek ?? 1,
+            completedActivities: data.completedActivities ?? [],
+            dailyNotes: data.dailyNotes ?? {},
+            dogName: data.dogName,
+            dogBreed: data.dogBreed,
+            dogDob: data.dogDob,
+            family: data.family ?? [],
+            sharedNotes: data.sharedNotes ?? [],
+            completedDailyByDate: data.completedDailyByDate ?? {},
+            progressPhotos: data.progressPhotos ?? [],
+            unlockedAchievements: data.unlockedAchievements ?? [],
+            calendarNotes: data.calendarNotes ?? {},
+          };
+        }
+        setLoading(false);
+        setNotesLoading(false);
+      },
+      (err) => {
+        setLoading(false);
+        setNotesLoading(false);
+        console.error("Firestore snapshot error:", err);
+        if (!isOffline) {
+          Alert.alert("🌐 Pack Sync Error", "Could not sync with your training pack: " + err.message);
+        }
+      }
+    );
+
+  return unsubscribe;
+}, [familyId]);
+
+  // Dog age calculation effect
+  useEffect(() => {
+    if (!dogDob) return;
+    const interval = setInterval(() => {
+      setCurrentDogAge(calcDogAge(dogDob, 0, new Date()));
+    }, 60 * 1000);
+    setCurrentDogAge(calcDogAge(dogDob, 0, new Date()));
+    return () => clearInterval(interval);
+  }, [dogDob]);
+
+  // Achievement checking effect with dog theme celebrations
+  useEffect(() => {
+    const checkAchievements = () => {
+      const newAchievements = [];
+      const { currentStreak } = calculateStreak(completedDailyByDate);
+
+      // Check for new achievements
+      if (currentWeek >= 1 && !unlockedAchievements.includes("first_week")) {
+        newAchievements.push("first_week");
+      }
+
+      if (currentStreak >= 7 && !unlockedAchievements.includes("streak_7")) {
+        newAchievements.push("streak_7");
+      }
+
+      if (currentStreak >= 30 && !unlockedAchievements.includes("streak_30")) {
+        newAchievements.push("streak_30");
+      }
+
+      if (progressPhotos.length > 0 && !unlockedAchievements.includes("photo_first")) {
+        newAchievements.push("photo_first");
+      }
+
+      // Check daily completion
+      const today = new Date().toISOString().slice(0, 10);
+      const completedToday = completedDailyByDate[today] || [];
+      const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+        acts.map((activity) => `daily-${slot}-${activity}`)
+      );
+
+      if (completedToday.length >= allDailyKeys.length && !unlockedAchievements.includes("all_daily")) {
+        newAchievements.push("all_daily");
+      }
+
+      // Check week perfect completion
+      const currentWeekActivities = weeklyPlans[currentWeek] || [];
+      const weekCompleted = currentWeekActivities.filter((act) =>
+        completedActivities.includes(`${currentWeek}-${act}`)
+      );
+
+      if (
+        weekCompleted.length === currentWeekActivities.length &&
+        currentWeekActivities.length > 0 &&
+        !unlockedAchievements.includes("week_perfect")
+      ) {
+        newAchievements.push("week_perfect");
+      }
+
+      // Add new achievements with dog theme celebration
+      if (newAchievements.length > 0) {
+        setUnlockedAchievements((prev) => [...prev, ...newAchievements]);
+        newAchievements.forEach((achievementId) => {
+          const achievement = achievements.find((a) => a.id === achievementId);
+          if (achievement) {
+            showToast(`🏆 Achievement Unlocked: ${achievement.title} 🐕`, "success");
+          }
+        });
+      }
+    };
+
+    checkAchievements();
+  }, [currentWeek, completedActivities, completedDailyByDate, progressPhotos, unlockedAchievements]);
+
+  // HANDLER FUNCTIONS
+
+  // Family ID submission with theme
+  const handleFamilyIdSubmit = async () => {
+    if (!inputId.trim()) return;
+    setCheckingFamilyId(true);
+    const famId = inputId.trim();
+
+    try {
+      const docSnap = await db.collection("families").doc(famId).get();
+      if (docSnap.exists) {
+        const data = docSnap.data();
+        if (data.dogName && data.dogBreed && data.dogDob) {
+          await AsyncStorage.setItem("familyId", famId);
+          await AsyncStorage.setItem("dogName", data.dogName);
+          await AsyncStorage.setItem("dogBreed", data.dogBreed);
+          await AsyncStorage.setItem("dogDob", data.dogDob);
+          setFamilyId(famId);
+          setDogName(data.dogName);
+          setDogBreed(data.dogBreed);
+          setDogDob(data.dogDob);
+          setCheckingFamilyId(false);
+          setShowDogInput(false);
+        } else {
+          Alert.alert(
+            "🏠 Family Pack Found",
+            "This Family ID exists but is missing some pup info. Please contact your pack leader!"
+          );
+          setCheckingFamilyId(false);
+        }
+      } else {
+        Alert.alert(
+          "🎉 Create New Training Pack?",
+          `No training pack found for ID "${famId}". Would you like to create a new pack with this ID?`,
+          [
+            { text: "❌ Cancel", style: "cancel", onPress: () => setCheckingFamilyId(false) },
+            {
+              text: "🚀 Create Pack",
+              style: "default",
+              onPress: () => {
+                setShowDogInput(true);
+                setCheckingFamilyId(false);
+              },
+            },
+          ]
+        );
+      }
+    } catch (e) {
+      Alert.alert("🌐 Connection Issue", e.message);
+      setCheckingFamilyId(false);
+    }
+  };
+
+  // Dog details submission with theme
+  const handleDogDetailsSubmit = async () => {
+    const breedToSave = inputBreed === "Other" ? inputBreedOther.trim() : inputBreed;
+
+    if (!inputId.trim() || !inputDog.trim() || !breedToSave || !inputDob.trim()) {
+      Alert.alert("🐕 Missing Pup Info", "Please fill in all required fields for your furry friend!");
+      return;
+    }
+
+    if (inputBreed === "Other" && !inputBreedOther.trim()) {
+      Alert.alert("🐕‍🦺 Breed Required", "Please tell us what breed your pup is!");
+      return;
+    }
+
+    if (!isValidDate(inputDob.trim())) {
+      Alert.alert("🎂 Invalid Date", "Please enter a valid birthday in YYYY-MM-DD format.");
+      return;
+    }
+
+    const famId = inputId.trim();
+    const dName = inputDog.trim();
+    const dBreed = breedToSave;
+    const dDob = inputDob.trim();
+
+    try {
+      await db.collection("families").doc(famId).set(
+        {
+          dogName: dName,
+          dogBreed: dBreed,
+          dogDob: dDob,
+          family: [
+            { id: 1, name: "🏆 Primary Trainer", editing: false },
+            { id: 2, name: "👨‍👩‍👧‍👦 Family Member 2", editing: false },
+            { id: 3, name: "👨‍👩‍👧‍👦 Family Member 3", editing: false },
+          ],
+        },
+        { merge: true }
+      );
+
+      await AsyncStorage.setItem("familyId", famId);
+      await AsyncStorage.setItem("dogName", dName);
+      await AsyncStorage.setItem("dogBreed", dBreed);
+      await AsyncStorage.setItem("dogDob", dDob);
+
+      setFamilyId(famId);
+      setDogName(dName);
+      setDogBreed(dBreed);
+      setDogDob(dDob);
+      setShowDogInput(false);
+      
+      showToast("🎉 Training pack created! Welcome to the pack!", "success");
+    } catch (e) {
+      Alert.alert("🌐 Connection Issue", e.message);
+    }
+  };
+
+  // Activity toggle with celebration
+  const toggleActivity = useCallback((week, activity) => {
+    const key = `${week}-${activity}`;
+    const wasCompleted = completedActivities.includes(key);
+    
+    setCompletedActivities((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+    
+    if (!wasCompleted) {
+      showToast(`🎯 Great job completing: ${activity}!`, "success");
+    }
+  }, [completedActivities]);
+
+  // Daily activity toggle with celebration
+  // Daily activity toggle with celebration ONLY on full day completion
+const toggleDailyActivity = useCallback((timeSlot, activity) => {
+  const key = `daily-${timeSlot}-${activity}`;
+  const today = getCurrentDate();
+
+  setCompletedDailyByDate((prev) => {
+    const prevForToday = prev[today] || [];
+    const isCompleted = prevForToday.includes(key);
+    const newCompletedToday = isCompleted 
+      ? prevForToday.filter((k) => k !== key) 
+      : [...prevForToday, key];
+
+    // Only check for full completion when adding a task (not removing)
+    if (!isCompleted) {
+      const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+        acts.map((activity) => `daily-${slot}-${activity}`)
+      );
+      
+      const wasFullyCompleted = prevForToday.length >= allDailyKeys.length;
+      const isNowFullyCompleted = newCompletedToday.length >= allDailyKeys.length;
+
+      // Only celebrate when we just completed ALL daily tasks
+      if (isNowFullyCompleted && !wasFullyCompleted) {
+        showToast("🎉 Pawsome! All daily training completed! Your pup earned extra treats! 🦴", "success");
+      }
+    }
+
+    return {
+      ...prev,
+      [today]: newCompletedToday,
+    };
+  });
+}, []);
+
+  // Notes handling with dog theme
+  const addNote = useCallback(
+    async (date, note) => {
+      const updatedNotes = { ...dailyNotes, [date]: note };
+      setDailyNotes(updatedNotes);
+
+      if (familyId) {
+        try {
+          await db.collection("families").doc(familyId).set({ dailyNotes: updatedNotes }, { merge: true });
+        } catch (e) {
+          console.error("Failed to save daily note:", e);
+          showToast("Failed to save note. Check your connection! 📶", "error");
+        }
+      }
+    },
+    [dailyNotes, familyId]
+  );
+
+  const handleAddSharedNote = async () => {
+    const trimmed = newSharedNote.trim();
+    if (!trimmed) return;
+
+    const author = currentUserName || (family && family.length > 0 ? family[0].name : "🐕 Anonymous Trainer");
+
+    const noteObj = {
+      id: Date.now().toString() + Math.random().toString(36).slice(2),
+      text: trimmed,
+      author,
+      timestamp: new Date().toISOString(),
+      authorId: currentUserName,
+    };
+
+    const updatedNotes = [noteObj, ...(sharedNotes || [])];
+
+    setSharedNotes(updatedNotes);
+    setNewSharedNote("");
+
+    try {
+      await db.collection("families").doc(familyId).set({ sharedNotes: updatedNotes }, { merge: true });
+      showToast("📝 Note shared with your pack!", "success");
+    } catch (e) {
+      console.error("Failed to save shared note:", e);
+      Alert.alert("🐕 Oops!", "Failed to save note. Please try again.");
+      setSharedNotes(sharedNotes);
+      setNewSharedNote(trimmed);
+    }
+  };
+
+  const saveNoteEdit = async (noteId) => {
+    if (!editingNoteText.trim()) {
+      Alert.alert("🐕 Empty Note", "Note cannot be empty!");
+      return;
+    }
+
+    const updatedNotes = sharedNotes.map((note) =>
+      note.id === noteId
+        ? {
+            ...note,
+            text: editingNoteText.trim(),
+            edited: true,
+            editTimestamp: new Date().toISOString(),
+          }
+        : note
+    );
+
+    setSharedNotes(updatedNotes);
+    setEditingNoteId(null);
+    setEditingNoteText("");
+
+    try {
+      await db.collection("families").doc(familyId).set({ sharedNotes: updatedNotes }, { merge: true });
+      showToast("✏️ Note updated!", "success");
+    } catch (e) {
+      console.error("Failed to update note:", e);
+      Alert.alert("🐕 Oops!", "Failed to update the note. Please try again.");
+    }
+  };
+
+  // Family member management with dog theme
+  const handleEditFamilyMember = useCallback(
+    (id) => {
+      setEditingMemberId(id);
+      setEditFamilyName({ ...editFamilyName, [id]: family.find((f) => f.id === id)?.name || "" });
+    },
+    [editFamilyName, family]
+  );
+
+  const handleSaveFamilyMember = useCallback((id, newName) => {
+    setFamily((family) =>
+      family.map((f) => (f.id === id ? { ...f, name: newName || "🐕 Unnamed Pack Member", editing: false } : f))
+    );
+    setEditingMemberId(null);
+    showToast("👥 Pack member updated!", "success");
+  }, []);
+
+  const handleRemoveFamilyMember = useCallback((id) => {
+    Alert.alert(
+      "🐕 Remove Pack Member?",
+      "Are you sure you want to remove this member from your training pack?",
+      [
+        { text: "❌ Cancel", style: "cancel" },
+        {
+          text: "🗑️ Remove",
+          style: "destructive",
+          onPress: () => {
+            setFamily((family) => family.filter((f) => f.id !== id));
+            showToast("👋 Pack member removed", "info");
+          },
+        },
+      ]
+    );
+  }, []);
+
+  const handleAddFamilyMember = useCallback(() => {
+    if (!newFamilyName.trim()) return;
+    const memberName = newFamilyName.trim().startsWith("🐕") || newFamilyName.trim().startsWith("👥") 
+      ? newFamilyName.trim() 
+      : `👥 ${newFamilyName.trim()}`;
+      
+    setFamily((family) => [...family, { id: Date.now(), name: memberName, editing: false }]);
+    setNewFamilyName("");
+    showToast("🎉 New pack member added!", "success");
+  }, [newFamilyName]);
+
+  // Dog editing modal with proper error handling
+  const openEditDogModal = useCallback(() => {
+  try {
+    const currentName = dogName || "";
+    let currentBreed = "";
+    let currentBreedOther = "";
+
+    if (dogBreed) {
+      // Safely check if the breed is in common breeds
+      const isCommonBreed = commonUKBreeds.some(breed => breed === dogBreed);
+      
+      if (isCommonBreed) {
+        currentBreed = dogBreed;
+      } else {
+        currentBreed = "Other";
+        // Safely extract breed name without emoji prefix
+        currentBreedOther = dogBreed.replace(/^[🐕🐕‍🦺🌭💪\u{1F400}-\u{1F9FF}]\s*/u, "").trim();
+      }
+    }
+
+    const currentDob = dogDob || "";
+
+    setEditDogName(currentName);
+    setEditDogBreed(currentBreed);
+    setEditDogBreedOther(currentBreedOther);
+    setEditDogDob(currentDob);
+    setEditDogModal(true);
+  } catch (e) {
+    console.error("Error opening dog edit modal:", e);
+    Alert.alert("🐕 Oops!", "Could not open the edit form. Please try again.");
+  }
+}, [dogName, dogBreed, dogDob]);
+
+
+  const saveDogInfo = async () => {
+  try {
+    const name = (editDogName || "").trim();
+    const dob = (editDogDob || "").trim();
+    const breedOther = (editDogBreedOther || "").trim();
+
+    let breedToSave = editDogBreed === "Other" ? breedOther : editDogBreed;
+
+    if (!name || !breedToSave || !dob) {
+      Alert.alert("🐕 Missing Info", "All fields are required for your pup!");
+      return;
+    }
+
+    if (editDogBreed === "Other" && !breedOther) {
+      Alert.alert("🐕‍🦺 Breed Required", "Please specify your pup's breed.");
+      return;
+    }
+
+    if (!isValidDate(dob)) {
+      Alert.alert("🎂 Invalid Date", "Please enter a valid birthday in YYYY-MM-DD format.");
+      return;
+    }
+
+    setDogName(name);
+    setDogBreed(breedToSave);
+    setDogDob(dob);
+
+    await updateDogInfoStorageAndFirestore(familyId, name, breedToSave, dob);
+    setEditDogModal(false);
+    showToast("🐕 Pup info updated successfully!", "success");
+  } catch (e) {
+    console.error("Error saving dog info:", e);
+    Alert.alert("🌐 Connection Issue", "Failed to save changes. Please try again.");
+  }
+};
+
+  const handleLogout = async () => {
+    Alert.alert(
+      "🔄 Switch Training Pack?",
+      "This will log you out and let you join a different training pack.",
+      [
+        { text: "❌ Cancel", style: "cancel" },
+        {
+          text: "🔄 Switch Pack",
+          style: "default",
+          onPress: async () => {
+            setFamilyDogLoading(true);
+            await AsyncStorage.removeItem("familyId");
+            await AsyncStorage.removeItem("dogName");
+            await AsyncStorage.removeItem("dogBreed");
+            await AsyncStorage.removeItem("dogDob");
+            await AsyncStorage.removeItem("completedDailyByDate");
+            setFamilyId(null);
+            setDogName(null);
+            setDogBreed(null);
+            setDogDob(null);
+            setInputId("");
+            setInputDog("");
+            setInputBreed("");
+            setInputBreedOther("");
+            setInputDob("");
+            setShowDogInput(false);
+            setFamilyDogLoading(false);
+            showToast("👋 Switched to new pack setup!", "info");
+          },
+        },
+      ]
+    );
+  };
+
+  // Photo handlers with celebration
+  const handlePhotoAdded = useCallback((newPhoto) => {
+    setProgressPhotos((prev) => [...prev, newPhoto]);
+    showToast("📸 Amazing progress photo! Your pup is growing! 🐕", "success");
+  }, []);
+
+  // Quick action handlers with dog theme
+  const handleQuickAddNote = () => {
+    setShowQuickNote(true);
+  };
+
+  const handleQuickTakePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("📸 Camera Permission", "We need camera access to capture your pup's pawsome progress!");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      try {
+        const imageData = await imageToBase64(result.assets[0].uri);
+        
+        if (imageData) {
+          const newPhoto = {
+            uri: result.assets[0].uri,
+            base64: imageData.base64,
+            type: imageData.type,
+            timestamp: new Date().toISOString(),
+            week: currentWeek,
+          };
+          handlePhotoAdded(newPhoto);
+        } else {
+          showToast("Failed to process photo", "error");
+        }
+      } catch (error) {
+        console.error("Error taking photo:", error);
+        showToast("Failed to save photo", "error");
+      }
+    }
+  };
+
+  const handleQuickMarkComplete = () => {
+    const today = getCurrentDate();
+    const completedToday = completedDailyByDate[today] || [];
+    const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+      acts.map((activity) => `daily-${slot}-${activity}`)
+    );
+
+    if (completedToday.length >= allDailyKeys.length) {
+      showToast("🎉 All daily tasks already completed! Your pup is pawsome! 🐕‍🦺", "success");
+    } else {
+      const remaining = allDailyKeys.filter((key) => !completedToday.includes(key));
+      showToast(`🎯 ${remaining.length} training tasks remaining for today! Keep going! 💪`, "info");
+    }
+  };
+
+  // Quick note modal handler with celebration
+  const handleQuickNoteSubmit = async () => {
+    if (!quickNoteText.trim()) return;
+
+    await addNote(selectedDate, quickNoteText.trim());
+    setQuickNoteText("");
+    setShowQuickNote(false);
+    showToast("📝 Training note added! Great job keeping track! 🐕", "success");
+  };
+
+  // Calculate all the stats with dog theme messaging
+  const today = getCurrentDate();
+  const completedToday = completedDailyByDate[today] || [];
+  const allDailyKeys = Object.entries(dailyRoutine).flatMap(([slot, acts]) =>
+    acts.map((activity) => `daily-${slot}-${activity}`)
+  );
+  const completedDaily = completedToday.length;
+  const dailyRate = allDailyKeys.length > 0 ? completedDaily / allDailyKeys.length : 0;
+
+  const completionRate = (() => {
+    const currentWeekActivities = weeklyPlans[currentWeek] || [];
+    const completed = currentWeekActivities.filter((act) =>
+      completedActivities.includes(`${currentWeek}-${act}`)
+    ).length;
+    return currentWeekActivities.length ? completed / currentWeekActivities.length : 0;
+  })();
+
+  const currentStage = getCurrentStage(currentWeek);
+  const { currentStreak, bestStreak } = calculateStreak(completedDailyByDate);
+
+  // Fixed confetti effects with celebration tracking
+useEffect(() => {
+  const today = getCurrentDate();
+  if (dailyRate === 1 && !celebratedDays.includes(today) && !showDailyConfetti) {
+    setShowDailyConfetti(true);
+    setCelebratedDays(prev => [...prev, today]);
+    showToast("🎉 Daily training complete! Your pup earned extra treats! 🦴", "success");
+    setTimeout(() => setShowDailyConfetti(false), 3500);
+  }
+}, [dailyRate, showDailyConfetti, celebratedDays]);
+
+useEffect(() => {
+  const currentWeekActivities = weeklyPlans[currentWeek] || [];
+  const allDone = currentWeekActivities.every((act) =>
+    completedActivities.includes(`${currentWeek}-${act}`)
+  );
+  const weekKey = `week-${currentWeek}`;
+  
+  if (allDone && !celebratedWeeks.includes(weekKey) && !showWeeklyConfetti && currentWeekActivities.length > 0) {
+    setShowWeeklyConfetti(true);
+    setCelebratedWeeks(prev => [...prev, weekKey]);
+    showToast("🏆 Week complete! Your pup is ready for the next challenge! 🐕‍🦺", "success");
+    setTimeout(() => setShowWeeklyConfetti(false), 3500);
+  }
+}, [currentWeek, completedActivities, showWeeklyConfetti, celebratedWeeks]);
+
+  // Loading states with dog theme
+  if (familyDogLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={{ fontSize: 48, marginBottom: 16 }}>🐕</Text>
+        <ActivityIndicator size="large" color={dogThemeColors.primary} />
+        <Text style={styles.loadingText}>Loading your pup's data...</Text>
+      </View>
+    );
+  }
+
+  // Setup screens with dog theme
+  if (!familyId || !dogName || !dogBreed || !dogDob) {
+    if (!showDogInput) {
+      return (
+        <View style={styles.setupContainer}>
+          <Text style={{ fontSize: 64, marginBottom: 16 }}>🐾</Text>
+          <Text style={styles.welcomeTitle}>Welcome to Puppy Training!</Text>
+          <Text style={styles.setupText}>
+            🏠 Enter your Family ID to sync training data with your pack.
+          </Text>
+          <Text style={styles.setupSubtext}>
+            👨‍👩‍👧‍👦 Use the same Family ID on all your family's devices. Create a new one or enter an existing ID to join your training pack!
+          </Text>
+          <TextInput
+            placeholder="🏷️ Family ID (e.g. ludo-smiths)"
+            value={inputId}
+            onChangeText={setInputId}
+            style={styles.setupInput}
+          />
+          <TouchableOpacity onPress={handleFamilyIdSubmit} style={styles.setupButton} activeOpacity={0.8}>
+            {checkingFamilyId ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.setupButtonText}>🚀 Let's Start Training!</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      );
+    } else {
+      return (
+        <View style={styles.setupContainer}>
+          <Text style={{ fontSize: 64, marginBottom: 16 }}>🐶</Text>
+          <Text style={styles.welcomeTitle}>Create Your Training Pack</Text>
+          <Text style={styles.setupText}>🐕 Tell us about your furry friend!</Text>
+          <TextInput value={inputId} editable={false} style={[styles.setupInput, styles.disabledInput]} />
+          <TextInput
+            placeholder="🐕 Dog Name (e.g. Ludo)"
+            value={inputDog}
+            onChangeText={setInputDog}
+            style={styles.setupInput}
+          />
+          <RNPickerSelect
+            onValueChange={(value) => setInputBreed(value)}
+            value={inputBreed}
+            placeholder={{ label: "🐕 Select Dog Breed...", value: "" }}
+            items={[
+              ...commonUKBreeds.map((breed) => ({ label: breed, value: breed })),
+              { label: "🐕 Other", value: "Other" },
+            ]}
+            style={{
+              inputIOS: styles.pickerInput,
+              inputAndroid: styles.pickerInput,
+            }}
+          />
+          {inputBreed === "Other" && (
+            <TextInput
+              placeholder="✏️ Type breed"
+              value={inputBreedOther}
+              onChangeText={setInputBreedOther}
+              style={styles.setupInput}
+            />
+          )}
+          <TextInput
+            placeholder="🎂 Date of Birth (YYYY-MM-DD)"
+            value={inputDob}
+            onChangeText={setInputDob}
+            keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"}
+            style={styles.setupInput}
+            ref={dobInputRef}
+            maxLength={10}
+          />
+          <TouchableOpacity onPress={handleDogDetailsSubmit} style={styles.setupButton} activeOpacity={0.8}>
+            <Text style={styles.setupButtonText}>🎉 Create Training Pack</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+  }
+
+  // ========== MAIN APP CONTENT ==========
+  return (
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <View style={styles.mainContent}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {isOffline && (
+            <View style={styles.offlineBanner}>
+              <Text style={{ fontSize: 20, marginRight: 8 }}>📶</Text>
+              <Text style={styles.offlineText}>You're offline. Changes will sync when back online! 🐕</Text>
+            </View>
+          )}
+
+          {showDailyConfetti && (
+            <ConfettiCannon count={200} origin={{ x: -10, y: 0 }} fallSpeed={2000} fadeOut autoStart />
+          )}
+          {showWeeklyConfetti && (
+            <ConfettiCannon count={300} origin={{ x: -10, y: 0 }} fallSpeed={2500} fadeOut autoStart />
+          )}
+
+          {/* ENHANCED Header with complete dog theme */}
+          <View style={styles.enhancedHeaderContainer}>
+            <View style={styles.headerTop}>
+              <View style={styles.dogInfoContainer}>
+                <DogAvatar dogName={dogName} dogBreed={dogBreed} />
+                <View style={styles.dogInfo}>
+                  <Text style={styles.enhancedDogName}>🐕 {dogName}</Text>
+                  <Text style={styles.dogDetails}>
+                    {dogBreed} &nbsp;&bull;&nbsp; {currentDogAge}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.dateTimeContainer}>
+                <Text style={styles.currentDate}>📅 {getCurrentDate()}</Text>
+                <Text style={styles.currentTime}>🕐 {getCurrentTime()}</Text>
+                <TouchableOpacity 
+                  style={styles.forceSyncButton} 
+                  onPress={forceSyncToFirebase}
+                  disabled={syncing || isOffline}
+                >
+                  <Text style={{ fontSize: 16, marginRight: 4 }}>🔄</Text>
+                  <Text style={styles.forceSyncText}>Force Sync</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.headerBottom}>
+              <TouchableOpacity onPress={openEditDogModal} style={styles.editButton} activeOpacity={0.7}>
+                <Text style={{ fontSize: 16, marginRight: 6 }}>✏️</Text>
+                <Text style={styles.editButtonText}>Edit Pup Info</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleLogout} style={styles.logoutButton} activeOpacity={0.8}>
+                <Text style={{ fontSize: 16, marginRight: 6 }}>🔄</Text>
+                <Text style={styles.logoutText}>Switch Pack</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Enhanced Navigation with Dog Theme */}
+          <View style={styles.enhancedNavigationContainer}>
+            {navigationTabs.map((tab) => {
+              const isActive = viewMode === tab.key;
+              
+              const renderIcon = () => {
+                const iconColor = isActive ? dogThemeColors.light : dogThemeColors.mediumText;
+                
+                if (tab.iconLib === "custom" && tab.CustomIcon) {
+                  return <tab.CustomIcon size={22} color={iconColor} />;
+                } else {
+                  const IconComponent = tab.iconLib;
+                  return (
+                    <IconComponent 
+                      name={tab.iconName} 
+                      size={22} 
+                      color={iconColor} 
+                    />
+                  );
+                }
+              };
+
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.navTab, isActive && styles.enhancedNavTabActive]}
+                  onPress={() => setViewMode(tab.key)}
+                  activeOpacity={0.7}
+                >
+                  {renderIcon()}
+                  <Text style={[
+                    styles.navTabText,
+                    { color: isActive ? dogThemeColors.light : dogThemeColors.mediumText }
+                  ]}>
+                    {tab.label}
+                  </Text>
+                  {isActive && (
+                    <View style={styles.activeTabIndicator} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Main content by viewMode with Dog Theme */}
+          {viewMode === "daily" && (
+            <View>
+              <View style={styles.enhancedProgressContainer}>
+                <View style={styles.progressHeader}>
+                  <Text style={{ fontSize: 24, marginRight: 8 }}>🌅</Text>
+                  <Text style={styles.progressTitle}>Today's Training Progress</Text>
+                </View>
+                <View style={styles.progressStats}>
+                  <ProgressRing progress={dailyRate} size={80} />
+                </View>
+              </View>
+
+              {/* Enhanced Time Slot Rendering with Dog Theme */}
+              {Object.entries(dailyRoutine).map(([timeSlot, acts]) => {
+                const colors = timeSlotColors[timeSlot] || timeSlotColors.morning;
+                return (
+                  <View
+                    key={timeSlot}
+                    style={[
+                      styles.enhancedTimeSlotContainer,
+                      {
+                        backgroundColor: colors.backgroundColor,
+                        borderLeftColor: colors.borderColor,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.timeSlotTitle, { color: colors.textColor }]}>
+                      <Text style={{ fontSize: 20 }}>{colors.emoji}</Text> {colors.title}
+                    </Text>
+                    {acts.map((activity, idx) => (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[
+                          styles.enhancedActivityRow,
+                          { backgroundColor: completedToday.includes(`daily-${timeSlot}-${activity}`) ? colors.borderColor + "20" : dogThemeColors.cardBg },
+                        ]}
+                        onPress={() => toggleDailyActivity(timeSlot, activity)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={{ fontSize: 20, marginRight: 12 }}>
+                          {completedToday.includes(`daily-${timeSlot}-${activity}`) ? "✅" : "⭕"}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.activityText,
+                            { color: colors.textColor },
+                            completedToday.includes(`daily-${timeSlot}-${activity}`) && styles.activityCompleted,
+                          ]}
+                        >
+                          {activity}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })}
+
+              <View style={styles.enhancedSection}>
+                <Text style={styles.enhancedSectionTitle}>
+                  <Text style={{ fontSize: 20, marginRight: 8 }}>⭐</Text> Week {currentWeek} Training Focus
+                </Text>
+                {(weeklyPlans[currentWeek] || []).map((activity, idx) => (
+                  <TouchableOpacity key={idx} style={styles.enhancedActivityRow} onPress={() => toggleActivity(currentWeek, activity)} activeOpacity={0.8}>
+                    <Text style={{ fontSize: 20, marginRight: 12 }}>
+                      {completedActivities.includes(`${currentWeek}-${activity}`) ? "🎯" : "⭕"}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.activityText,
+                        completedActivities.includes(`${currentWeek}-${activity}`) && styles.activityCompleted,
+                      ]}
+                    >
+                      {activity}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.enhancedSection}>
+                <Text style={styles.enhancedSectionTitle}>
+                  <Text style={{ fontSize: 20, marginRight: 8 }}>📝</Text> Today's Training Notes
+                </Text>
+                <TextInput
+                  style={styles.enhancedNoteInput}
+                  placeholder="🐕 Add a note about today's training session..."
+                  value={dailyNotes[selectedDate] || ""}
+                  onChangeText={(text) => addNote(selectedDate, text)}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              <SmartTips dogBreed={dogBreed} currentWeek={currentWeek} completionRate={completionRate} recentActivities={completedActivities} />
+
+              <StreakCounter currentStreak={currentStreak} bestStreak={bestStreak} />
+            </View>
+          )}
+
+          {viewMode === "weekly" && (
+            <View style={styles.enhancedSection}>
+             <View style={styles.weekNavigation}>
+  <TouchableOpacity
+    onPress={() => setCurrentWeek((w) => Math.max(1, w - 1))}
+    disabled={currentWeek === 1}
+    style={[styles.weekNavButton, currentWeek === 1 && styles.weekNavDisabled]}
+    activeOpacity={0.7}
+  >
+    <Text style={styles.weekNavText}>⬅️ Prev</Text>
+  </TouchableOpacity>
+  
+  <View style={styles.weekTitleContainer}>
+    <Text style={styles.weekTitle}>Week {currentWeek}</Text>
+  </View>
+  
+  <TouchableOpacity
+    onPress={() => setCurrentWeek((w) => Math.min(MAX_WEEKS, w + 1))}
+    disabled={currentWeek === MAX_WEEKS}
+    style={[styles.weekNavButton, currentWeek === MAX_WEEKS && styles.weekNavDisabled]}
+    activeOpacity={0.7}
+  >
+    <Text style={styles.weekNavText}>Next ➡️</Text>
+  </TouchableOpacity>
+</View>
+
+              {/* Enhanced Stage Indicator with Dog Theme */}
+              <View
+                style={[
+                  styles.enhancedStageIndicator,
+                  {
+                    backgroundColor: trainingStages[currentStage]?.color || "#f3f4f6",
+                    borderColor: trainingStages[currentStage]?.borderColor || "#d1d5db",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.enhancedStageText,
+                    { color: trainingStages[currentStage]?.textColor || "#374151" },
+                  ]}
+                >
+                  {trainingStages[currentStage]?.emoji} {trainingStages[currentStage]?.name} • {trainingStages[currentStage]?.range}
+                </Text>
+              </View>
+
+              <View style={styles.enhancedProgressContainer}>
+                <View style={styles.progressHeader}>
+                  <Text style={{ fontSize: 24, marginRight: 8 }}>🎯</Text>
+                  <Text style={styles.progressTitle}>Week {currentWeek} Progress</Text>
+                </View>
+                <View style={styles.progressStats}>
+                  <ProgressRing progress={completionRate} size={80} />
+                </View>
+              </View>
+
+              <Text style={styles.enhancedSectionTitle}>
+                <Text style={{ fontSize: 20, marginRight: 8 }}>🏆</Text> This Week's Training Goals
+              </Text>
+              {(weeklyPlans[currentWeek] || []).map((activity, idx) => (
+                <TouchableOpacity key={idx} style={styles.enhancedActivityRow} onPress={() => toggleActivity(currentWeek, activity)} activeOpacity={0.8}>
+                  <Text style={{ fontSize: 20, marginRight: 12 }}>
+                    {completedActivities.includes(`${currentWeek}-${activity}`) ? "🎯" : "⭕"}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.activityText,
+                      completedActivities.includes(`${currentWeek}-${activity}`) && styles.activityCompleted,
+                    ]}
+                  >
+                    {activity}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              <PhotoProgress week={currentWeek} photos={progressPhotos} onPhotoAdded={handlePhotoAdded} />
+            </View>
+          )}
+
+          {viewMode === "progress" && (
+            <View>
+              <View style={styles.enhancedSection}>
+                <Text style={styles.enhancedSectionTitle}>
+                  <Text style={{ fontSize: 20, marginRight: 8 }}>📊</Text> Training Overview
+                </Text>
+                <View style={styles.overviewStats}>
+                  <View style={styles.enhancedStatCard}>
+                    <Text style={{ fontSize: 24, marginBottom: 4 }}>📅</Text>
+                    <Text style={styles.enhancedStatNumber}>{currentWeek}</Text>
+                    <Text style={styles.enhancedStatLabel}>Current Week</Text>
+                  </View>
+                  <View style={styles.enhancedStatCard}>
+                    <Text style={{ fontSize: 24, marginBottom: 4 }}>🎯</Text>
+                    <Text style={styles.enhancedStatNumber}>{Math.round(completionRate * 100)}%</Text>
+                    <Text style={styles.enhancedStatLabel}>Week Progress</Text>
+                  </View>
+                  <View style={styles.enhancedStatCard}>
+                    <Text style={{ fontSize: 24, marginBottom: 4 }}>✅</Text>
+                    <Text style={styles.enhancedStatNumber}>{Math.round(dailyRate * 100)}%</Text>
+                    <Text style={styles.enhancedStatLabel}>Today's Tasks</Text>
+                  </View>
+                </View>
+              </View>
+
+              <TrainingCalendar
+                completedDailyByDate={completedDailyByDate}
+                onDateSelect={setSelectedDate}
+                selectedDate={selectedDate}
+                calendarNotes={calendarNotes}
+                onOpenNoteModal={handleOpenNoteModal}
+                visibleNotes={visibleNotes}
+                setVisibleNotes={setVisibleNotes}
+              />
+
+              <View style={styles.enhancedSection}>
+                <Text style={styles.enhancedSectionTitle}>
+                  <Text style={{ fontSize: 20, marginRight: 8 }}>📈</Text> Weekly Training History
+                </Text>
+                {[...Array(Math.min(currentWeek, MAX_WEEKS))].map((_, i) => {
+                  const week = i + 1;
+                  const weekActivities = weeklyPlans[week] || [];
+                  const weekCompleted = weekActivities.filter((act) =>
+                    completedActivities.includes(`${week}-${act}`)
+                  ).length;
+                  const weekRate = weekActivities.length > 0 ? weekCompleted / weekActivities.length : 0;
+
+                  return (
+                    <View key={week} style={styles.enhancedWeekHistoryItem}>
+                      <Text style={styles.weekHistoryTitle}>📅 Week {week}</Text>
+                      <View style={styles.enhancedProgressBarContainer}>
+                        <View style={[styles.enhancedProgressBar, { width: `${weekRate * 100}%` }]} />
+                      </View>
+                      <Text style={styles.weekHistoryPercent}>{Math.round(weekRate * 100)}%</Text>
+                      <Text style={{ fontSize: 16, marginLeft: 8 }}>
+                        {weekRate === 1 ? "🏆" : weekRate > 0.7 ? "⭐" : weekRate > 0.3 ? "📚" : "🎯"}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {viewMode === "notes" && (
+            <View style={styles.enhancedSection}>
+              <Text style={styles.enhancedSectionTitle}>
+                <Text style={{ fontSize: 20, marginRight: 8 }}>💬</Text> Pack Training Notes
+              </Text>
+
+              <View style={styles.addNoteContainer}>
+                <TextInput
+                  style={styles.enhancedAddNoteInput}
+                  placeholder="🐕 Share a training note with your pack..."
+                  value={newSharedNote}
+                  onChangeText={setNewSharedNote}
+                  multiline
+                  numberOfLines={2}
+                />
+                <TouchableOpacity onPress={handleAddSharedNote} style={styles.enhancedAddNoteButton} activeOpacity={0.8}>
+                  <Text style={{ fontSize: 18, color: "#fff" }}>📤</Text>
+                </TouchableOpacity>
+              </View>
+
+              {notesLoading ? (
+                <View style={styles.notesLoader}>
+                  <ActivityIndicator size="small" color={dogThemeColors.primary} />
+                  <Text style={{ color: dogThemeColors.mediumText, marginTop: 8 }}>Loading pack notes...</Text>
+                </View>
+              ) : (
+                <View style={styles.notesContainer}>
+                  {sharedNotes && sharedNotes.length > 0 ? (
+                    sharedNotes.map((note) => (
+                      <View key={note.id} style={styles.enhancedNoteItem}>
+                        <View style={styles.noteHeader}>
+                          <Text style={styles.enhancedNoteAuthor}>🐕 {note.author}</Text>
+                          <Text style={styles.enhancedNoteTimestamp}>
+                            📅 {new Date(note.timestamp).toLocaleDateString()}{" "}
+                            🕐 {new Date(note.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </Text>
+                        </View>
+
+                        {editingNoteId === note.id ? (
+                          <View style={styles.noteEditContainer}>
+                            <TextInput
+                              style={styles.enhancedNoteEditInput}
+                              value={editingNoteText}
+                              onChangeText={setEditingNoteText}
+                              multiline
+                              autoFocus
+                            />
+                            <View style={styles.noteEditActions}>
+                              <TouchableOpacity
+                                onPress={() => saveNoteEdit(note.id)}
+                                style={styles.noteEditButton}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={{ fontSize: 16 }}>✅</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setEditingNoteId(null);
+                                  setEditingNoteText("");
+                                }}
+                                style={styles.noteEditButton}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={{ fontSize: 16 }}>❌</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ) : (
+                          <>
+                            <Text style={styles.enhancedNoteText}>{note.text}</Text>
+                            {note.edited && (
+                              <Text style={styles.enhancedNoteEdited}>
+                                ✏️ Edited {new Date(note.editTimestamp).toLocaleDateString()}
+                              </Text>
+                            )}
+
+                            {note.authorId === currentUserName && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setEditingNoteId(note.id);
+                                  setEditingNoteText(note.text);
+                                }}
+                                style={styles.noteEditIcon}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={{ fontSize: 14 }}>✏️</Text>
+                              </TouchableOpacity>
+                            )}
+                          </>
+                        )}
+                      </View>
+                    ))
+                  ) : (
+                    <View style={{ alignItems: "center", paddingVertical: 40 }}>
+                      <Text style={{ fontSize: 48, marginBottom: 16 }}>🐕</Text>
+                      <Text style={styles.enhancedNoNotesText}>No pack notes yet!</Text>
+                      <Text style={styles.enhancedNoNotesText}>Add one above to share with your training pack! 🎾</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {viewMode === "achievements" && (
+            <View style={styles.enhancedSection}>
+              <Text style={styles.enhancedSectionTitle}>
+                <Text style={{ fontSize: 20, marginRight: 8 }}>🏆</Text> Training Achievements
+              </Text>
+              <View style={styles.enhancedAchievementsGrid}>
+                {achievements.map((achievement) => (
+                  <AchievementBadge
+                    key={achievement.id}
+                    achievement={achievement}
+                    unlocked={unlockedAchievements.includes(achievement.id)}
+                  />
+                ))}
+              </View>
+
+              <StreakCounter currentStreak={currentStreak} bestStreak={bestStreak} />
+
+              <View style={styles.enhancedAchievementStats}>
+                <Text style={styles.enhancedAchievementStatsTitle}>🎯 Your Training Progress</Text>
+                <Text style={styles.enhancedAchievementStatsText}>
+                  🏆 {unlockedAchievements.length} of {achievements.length} achievements unlocked
+                </Text>
+                <View style={styles.enhancedProgressBarContainer}>
+                  <View
+                    style={[
+                      styles.enhancedProgressBar,
+                      { width: `${(unlockedAchievements.length / achievements.length) * 100}%` },
+                    ]}
+                  />
+                </View>
+                {unlockedAchievements.length === achievements.length && (
+                  <Text style={{ textAlign: "center", marginTop: 16, fontSize: 18, color: dogThemeColors.success }}>
+                    🎉 Pawsome! You've unlocked everything! 🐕‍🦺
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+
+          {viewMode === "family" && (
+            <View style={styles.enhancedSection}>
+              <Text style={styles.enhancedSectionTitle}>
+                <Text style={{ fontSize: 20, marginRight: 8 }}>👨‍👩‍👧‍👦</Text> Training Pack Members
+              </Text>
+              {family.map((member) => (
+                <View key={member.id} style={styles.enhancedFamilyMemberRow}>
+                  {editingMemberId === member.id ? (
+                    <View style={styles.familyEditContainer}>
+                      <TextInput
+                        style={styles.enhancedFamilyEditInput}
+                        value={editFamilyName[member.id] || ""}
+                        onChangeText={(text) => setEditFamilyName({ ...editFamilyName, [member.id]: text })}
+                        onBlur={() => handleSaveFamilyMember(member.id, editFamilyName[member.id])}
+                        autoFocus
+                      />
+                      <TouchableOpacity
+                        onPress={() => handleSaveFamilyMember(member.id, editFamilyName[member.id])}
+                        style={styles.familyActionButton}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ fontSize: 18 }}>✅</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.enhancedFamilyMemberName}>{member.name}</Text>
+                      <View style={styles.familyActions}>
+                        <TouchableOpacity
+                          onPress={() => handleEditFamilyMember(member.id)}
+                          style={styles.familyActionButton}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={{ fontSize: 16 }}>✏️</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleRemoveFamilyMember(member.id)}
+                          style={styles.familyActionButton}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={{ fontSize: 16 }}>🗑️</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              ))}
+
+              <View style={styles.enhancedAddFamilyContainer}>
+                <TextInput
+                  style={styles.enhancedAddFamilyInput}
+                  placeholder="👤 Add pack member..."
+                  value={newFamilyName}
+                  onChangeText={setNewFamilyName}
+                  onSubmitEditing={handleAddFamilyMember}
+                />
+                <TouchableOpacity onPress={handleAddFamilyMember} style={styles.enhancedAddFamilyButton} activeOpacity={0.8}>
+                  <Text style={{ fontSize: 18, color: dogThemeColors.primary }}>➕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Quick Actions Floating Button with Dog Theme */}
+        <QuickActions onAddNote={handleQuickAddNote} onTakePhoto={handleQuickTakePhoto} onMarkComplete={handleQuickMarkComplete} />
+
+        {/* Sync indicator with Dog Theme */}
+        {syncing && (
+          <View style={styles.syncIndicator}>
+            <Text style={{ fontSize: 16, marginRight: 6 }}>🔄</Text>
+            <Text style={styles.syncText}>Syncing with pack...</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Dog edit modal with theme */}
+      <Modal visible={editDogModal} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.enhancedModalContainer}>
+          <View style={styles.enhancedModalHeader}>
+            <TouchableOpacity onPress={() => setEditDogModal(false)}>
+              <Text style={{ fontSize: 20 }}>❌</Text>
+            </TouchableOpacity>
+            <Text style={styles.enhancedModalTitle}>🐕 Edit Pup Info</Text>
+            <TouchableOpacity onPress={saveDogInfo}>
+              <Text style={styles.enhancedModalSave}>💾 Save</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.enhancedModalContent}>
+            <View style={styles.enhancedModalSection}>
+              <Text style={styles.enhancedModalLabel}>🐕 Dog Name</Text>
+              <TextInput
+                style={styles.enhancedModalInput}
+                value={editDogName}
+                onChangeText={setEditDogName}
+                placeholder="Dog Name"
+              />
+            </View>
+            <View style={styles.enhancedModalSection}>
+              <Text style={styles.enhancedModalLabel}>🐕‍🦺 Breed</Text>
+              <RNPickerSelect
+                onValueChange={(value) => setEditDogBreed(value)}
+                value={editDogBreed}
+                placeholder={{ label: "🐕 Select Dog Breed...", value: "" }}
+                items={[
+                  ...commonUKBreeds.map((breed) => ({ label: breed, value: breed })),
+                  { label: "🐕 Other", value: "Other" },
+                ]}
+                style={{
+                  inputIOS: styles.enhancedModalPickerInput,
+                  inputAndroid: styles.enhancedModalPickerInput,
+                }}
+              />
+              {editDogBreed === "Other" && (
+                <TextInput
+                  style={[styles.enhancedModalInput, styles.modalInputMarginTop]}
+                  value={editDogBreedOther}
+                  onChangeText={setEditDogBreedOther}
+                  placeholder="✏️ Specify breed"
+                />
+              )}
+            </View>
+            <View style={styles.enhancedModalSection}>
+              <Text style={styles.enhancedModalLabel}>🎂 Date of Birth (YYYY-MM-DD)</Text>
+              <TextInput
+                style={styles.enhancedModalInput}
+                value={editDogDob}
+                onChangeText={setEditDogDob}
+                placeholder="YYYY-MM-DD"
+                keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"}
+                maxLength={10}
+              />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Quick Note Modal with Dog Theme */}
+      <Modal visible={showQuickNote} animationType="slide" transparent={true}>
+        <View style={styles.quickNoteOverlay}>
+          <View style={styles.enhancedQuickNoteModal}>
+            <View style={styles.quickNoteHeader}>
+              <Text style={styles.enhancedQuickNoteTitle}>📝 Quick Training Note</Text>
+              <TouchableOpacity onPress={() => setShowQuickNote(false)}>
+                <Text style={{ fontSize: 18 }}>❌</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.enhancedQuickNoteInput}
+              placeholder="🐕 Add a quick training note..."
+              value={quickNoteText}
+              onChangeText={setQuickNoteText}
+              multiline
+              numberOfLines={4}
+              autoFocus
+            />
+            <View style={styles.quickNoteActions}>
+              <TouchableOpacity style={styles.enhancedQuickNoteCancel} onPress={() => setShowQuickNote(false)}>
+                <Text style={styles.quickNoteCancelText}>❌ Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.enhancedQuickNoteSave} onPress={handleQuickNoteSubmit}>
+                <Text style={styles.enhancedQuickNoteSaveText}>💾 Save Note</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Calendar Note Modal with Dog Theme */}
+      <Modal visible={showNoteModal} transparent animationType="fade">
+        <View style={styles.noteModalOverlay}>
+          <View style={styles.noteModalContainer}>
+            <Text style={styles.noteModalTitle}>
+              📝 Add note for {currentNoteDate}
+            </Text>
+            <TextInput
+              value={noteInputText}
+              onChangeText={setNoteInputText}
+              placeholder="🐕 Training note..."
+              style={styles.noteModalInput}
+              multiline
+            />
+            <View style={styles.noteModalActions}>
+              <TouchableOpacity
+                onPress={() => { setShowNoteModal(false); Keyboard.dismiss(); }}
+                style={styles.noteModalCancel}
+              >
+                <Text style={styles.noteModalCancelText}>❌ Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveNote}
+                style={styles.noteModalSave}
+              >
+                <Text style={styles.noteModalSaveText}>💾 Save Note</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+// ========== MAIN EXPORT WITH ERROR BOUNDARY ==========
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <MainApp />
+      </ErrorBoundary>
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: dogThemeColors.light,
+  },
+  mainContent: {
+    flex: 1,
+    backgroundColor: dogThemeColors.light,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 100,
+  },
+  // Enhanced header container with dog theme
+  enhancedHeaderContainer: {
+    marginBottom: 20,
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  dogInfoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  dogInfo: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  enhancedDogName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    letterSpacing: 0.3,
+  },
+  dogDetails: {
+    fontSize: 14,
+    color: dogThemeColors.mediumText,
+    marginTop: 2,
+    fontWeight: "500",
+  },
+  dateTimeContainer: {
+    alignItems: "flex-end",
+    backgroundColor: dogThemeColors.lightAccent,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    minWidth: 140,
+  },
+  currentDate: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+  },
+  currentTime: {
+    fontSize: 14,
+    color: dogThemeColors.mediumText,
+    marginTop: 2,
+    fontWeight: "500",
+  },
+  forceSyncButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: dogThemeColors.cardBg,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: dogThemeColors.accent,
+  },
+  forceSyncText: {
+    color: dogThemeColors.primary,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  headerBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  editButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: dogThemeColors.lightAccent,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    marginRight: 12,
+  },
+  editButtonText: {
+    color: dogThemeColors.primary,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFE6E6",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: dogThemeColors.warning,
+  },
+  logoutText: {
+    color: dogThemeColors.warning,
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  // Enhanced navigation container with dog theme
+  enhancedNavigationContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 6,
+    marginBottom: 20,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+    flexDirection: "row",
+  },
+  navTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+    borderRadius: 12,
+    marginHorizontal: 1,
+  },
+  navTabText: {
+    fontSize: 9,
+    fontWeight: "600",
+    marginTop: 2,
+    textAlign: "center",
+  },
+  enhancedNavTabActive: {
+    backgroundColor: dogThemeColors.primary,
+    shadowColor: dogThemeColors.secondary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  activeTabIndicator: {
+    position: "absolute",
+    bottom: 0,
+    left: "25%",
+    right: "25%",
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: dogThemeColors.accent,
+  },
+  // Enhanced progress container with dog theme
+  enhancedProgressContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.success,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: dogThemeColors.lightAccent,
+  },
+  progressTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    letterSpacing: 0.5,
+  },
+  progressStats: {
+    alignItems: "center",
+  },
+  // Enhanced section with dog theme
+  enhancedSection: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  enhancedSectionTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: dogThemeColors.lightAccent,
+  },
+  // Enhanced time slot container with dog theme
+  enhancedTimeSlotContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 6,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  timeSlotTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  // Enhanced activity row with dog theme
+  enhancedActivityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginVertical: 4,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  activityText: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    flex: 1,
+    fontWeight: "500",
+  },
+  activityCompleted: {
+    textDecorationLine: "line-through",
+    color: dogThemeColors.mediumText,
+    opacity: 0.7,
+  },
+  // Enhanced stage indicator with dog theme
+  enhancedStageIndicator: {
+    padding: 18,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 3,
+  },
+  enhancedStageText: {
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+    letterSpacing: 0.3,
+  },
+  overviewStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  // Enhanced stat card with dog theme
+  enhancedStatCard: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: dogThemeColors.lightAccent,
+    padding: 20,
+    borderRadius: 16,
+    marginHorizontal: 6,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  enhancedStatNumber: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: dogThemeColors.primary,
+    letterSpacing: 0.5,
+  },
+  enhancedStatLabel: {
+    fontSize: 13,
+    color: dogThemeColors.mediumText,
+    marginTop: 6,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  streakContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    shadowColor: dogThemeColors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  streakItem: {
+    alignItems: "center",
+    backgroundColor: dogThemeColors.lightAccent,
+    padding: 16,
+    borderRadius: 16,
+    minWidth: 120,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  streakNumber: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: dogThemeColors.primary,
+    marginTop: 8,
+  },
+  streakLabel: {
+    fontSize: 14,
+    color: dogThemeColors.primary,
+    marginTop: 6,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  streakSubLabel: {
+    fontSize: 11,
+    color: dogThemeColors.mediumText,
+    marginTop: 2,
+    textAlign: "center",
+  },
+  calendar: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  calendarTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  calendarSubtitle: {
+    fontSize: 14,
+    color: dogThemeColors.mediumText,
+    marginBottom: 16,
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+  weekDays: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 8,
+  },
+  weekDayText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: dogThemeColors.mediumText,
+    width: 32,
+    textAlign: "center",
+  },
+  daysGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  dayCell: {
+    width: "14.28%",
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 10,
+    marginVertical: 2,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+    position: "relative",
+  },
+  completedDay: {
+    backgroundColor: dogThemeColors.success,
+    shadowColor: dogThemeColors.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+    borderColor: dogThemeColors.success,
+  },
+  selectedDay: {
+    backgroundColor: dogThemeColors.primary,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+    borderColor: dogThemeColors.primary,
+  },
+  noteDay: {
+    backgroundColor: dogThemeColors.warning,
+    borderColor: dogThemeColors.warning,
+  },
+  dayText: {
+    fontSize: 14,
+    color: dogThemeColors.darkText,
+  },
+  completedDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  selectedDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  noteDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  notePopup: {
+    position: "absolute",
+    top: 38,
+    left: 0,
+    right: 0,
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 8,
+    padding: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.warning,
+    zIndex: 99,
+    minWidth: 120,
+    minHeight: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+  },
+  notePopupText: {
+    color: dogThemeColors.darkText,
+    fontSize: 12,
+    textAlign: "center",
+  },
+  tipsContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+      borderColor: dogThemeColors.lightAccent,
+  },
+  navTab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+    borderRadius: 12,
+    marginHorizontal: 1,
+  },
+  navTabText: {
+    fontSize: 9,
+    fontWeight: "600",
+    marginTop: 2,
+    textAlign: "center",
+  },
+  enhancedNavTabActive: {
+    backgroundColor: dogThemeColors.primary,
+    shadowColor: dogThemeColors.secondary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  activeTabIndicator: {
+    position: "absolute",
+    bottom: 0,
+    left: "25%",
+    right: "25%",
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: dogThemeColors.accent,
+  },
+  // Enhanced progress container with dog theme
+  enhancedProgressContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.success,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: dogThemeColors.lightAccent,
+  },
+  progressTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    letterSpacing: 0.5,
+  },
+  progressStats: {
+    alignItems: "center",
+  },
+  // Enhanced section with dog theme
+  enhancedSection: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  enhancedSectionTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: dogThemeColors.lightAccent,
+  },
+  // Enhanced time slot container with dog theme
+  enhancedTimeSlotContainer: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 6,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  timeSlotTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  // Enhanced activity row with dog theme
+  enhancedActivityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginVertical: 4,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  activityText: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    flex: 1,
+    fontWeight: "500",
+  },
+  activityCompleted: {
+    textDecorationLine: "line-through",
+    color: dogThemeColors.mediumText,
+    opacity: 0.7,
+  },
+  // Enhanced stage indicator with dog theme
+  enhancedStageIndicator: {
+    padding: 18,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 3,
+  },
+  enhancedStageText: {
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+    letterSpacing: 0.3,
+  },
+  overviewStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  // Enhanced stat card with dog theme
+  enhancedStatCard: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: dogThemeColors.lightAccent,
+    padding: 20,
+    borderRadius: 16,
+    marginHorizontal: 6,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  enhancedStatNumber: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: dogThemeColors.primary,
+    letterSpacing: 0.5,
+  },
+  enhancedStatLabel: {
+    fontSize: 13,
+    color: dogThemeColors.mediumText,
+    marginTop: 6,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  streakContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    shadowColor: dogThemeColors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  streakItem: {
+    alignItems: "center",
+    backgroundColor: dogThemeColors.lightAccent,
+    padding: 16,
+    borderRadius: 16,
+    minWidth: 120,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  streakNumber: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: dogThemeColors.primary,
+    marginTop: 8,
+  },
+  streakLabel: {
+    fontSize: 14,
+    color: dogThemeColors.primary,
+    marginTop: 6,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  streakSubLabel: {
+    fontSize: 11,
+    color: dogThemeColors.mediumText,
+    marginTop: 2,
+    textAlign: "center",
+  },
+  calendar: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  calendarTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  calendarSubtitle: {
+    fontSize: 14,
+    color: dogThemeColors.mediumText,
+    marginBottom: 16,
+    textAlign: "center",
+    fontStyle: "italic",
+  },
+  weekDays: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 8,
+  },
+  weekDayText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: dogThemeColors.mediumText,
+    width: 32,
+    textAlign: "center",
+  },
+  daysGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  dayCell: {
+    width: "14.28%",
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 10,
+    marginVertical: 2,
+    borderWidth: 1,
+    borderColor: dogThemeColors.lightAccent,
+    position: "relative",
+  },
+  completedDay: {
+    backgroundColor: dogThemeColors.success,
+    shadowColor: dogThemeColors.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+    borderColor: dogThemeColors.success,
+  },
+  selectedDay: {
+    backgroundColor: dogThemeColors.primary,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+    borderColor: dogThemeColors.primary,
+  },
+  noteDay: {
+    backgroundColor: dogThemeColors.warning,
+    borderColor: dogThemeColors.warning,
+  },
+  dayText: {
+    fontSize: 14,
+    color: dogThemeColors.darkText,
+  },
+  completedDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  selectedDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  noteDayText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  notePopup: {
+    position: "absolute",
+    top: 38,
+    left: 0,
+    right: 0,
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 8,
+    padding: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.warning,
+    zIndex: 99,
+    minWidth: 120,
+    minHeight: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+  },
+  notePopupText: {
+    color: dogThemeColors.darkText,
+    fontSize: 12,
+    textAlign: "center",
+  },
+  tipsContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: dogThemeColors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  tipsHeader: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 16,
+  },
+  tipCard: {
+    backgroundColor: dogThemeColors.lightAccent,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: dogThemeColors.accent,
+    borderWidth: 1,
+    borderColor: dogThemeColors.accent,
+  },
+  tipHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  tipTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginLeft: 10,
+  },
+  tipContent: {
+    fontSize: 15,
+    color: dogThemeColors.mediumText,
+    lineHeight: 22,
+    fontWeight: "500",
+  },
+  photoContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+  },
+  photoTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 8,
+  },
+  photoSubtitle: {
+    fontSize: 14,
+    color: dogThemeColors.mediumText,
+    marginBottom: 12,
+    fontStyle: "italic",
+  },
+  cameraButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: dogThemeColors.lightAccent,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderStyle: "dashed",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  cameraButtonText: {
+    fontSize: 16,
+    color: dogThemeColors.primary,
+    fontWeight: "600",
+  },
+  photosGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+  },
+  photoWrapper: {
+    marginRight: 8,
+    marginBottom: 8,
+    alignItems: "center",
+  },
+  photo: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  photoDate: {
+    fontSize: 10,
+    color: dogThemeColors.mediumText,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  quickActionsContainer: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    alignItems: "center",
+  },
+  actionButton: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+  },
+  actionButtonInner: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  mainButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: dogThemeColors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 3,
+    borderColor: dogThemeColors.accent,
+  },
+  enhancedAchievementsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  achievementBadge: {
+    width: "48%",
+    backgroundColor: dogThemeColors.lightAccent,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    marginBottom: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: "#ccc",
+  },
+  achievementUnlocked: {
+    backgroundColor: "#FFF8DC",
+    borderColor: dogThemeColors.accent,
+    shadowColor: dogThemeColors.accent,
+    shadowOpacity: 0.25,
+  },
+  achievementTitle: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 8,
+    fontWeight: "700",
+  },
+  achievementTitleUnlocked: {
+    color: dogThemeColors.primary,
+  },
+  achievementDescription: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  achievementDescriptionUnlocked: {
+    color: dogThemeColors.mediumText,
+  },
+  achievementUnlockedText: {
+    fontSize: 12,
+    color: dogThemeColors.success,
+    textAlign: "center",
+    marginTop: 4,
+    fontWeight: "bold",
+  },
+  enhancedAchievementStats: {
+    marginTop: 20,
+    padding: 20,
+    backgroundColor: dogThemeColors.lightAccent,
+    borderRadius: 16,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 1,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  enhancedAchievementStatsTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: dogThemeColors.darkText,
+    marginBottom: 8,
+  },
+  enhancedAchievementStatsText: {
+    fontSize: 14,
+    color: dogThemeColors.mediumText,
+    marginBottom: 12,
+  },
+  enhancedWeekHistoryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingVertical: 6,
+  },
+  weekHistoryTitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: dogThemeColors.darkText,
+    width: 80,
+  },
+  enhancedProgressBarContainer: {
+    flex: 1,
+    height: 12,
+    backgroundColor: dogThemeColors.lightAccent,
+    borderRadius: 6,
+    marginHorizontal: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: dogThemeColors.accent,
+  },
+  enhancedProgressBar: {
+    height: "100%",
+    backgroundColor: dogThemeColors.success,
+    borderRadius: 6,
+  },
+  weekHistoryPercent: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: dogThemeColors.darkText,
+    width: 40,
+    textAlign: "right",
+  },
+  enhancedFamilyMemberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: dogThemeColors.lightAccent,
+    marginBottom: 2,
+  },
+  familyEditContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  enhancedFamilyEditInput: {
+    flex: 1,
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: dogThemeColors.cardBg,
+  },
+  enhancedFamilyMemberName: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    flex: 1,
+    fontWeight: "500",
+  },
+  familyActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  familyActionButton: {
+    padding: 10,
+    marginLeft: 4,
+  },
+  enhancedAddFamilyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: dogThemeColors.lightAccent,
+  },
+  enhancedAddFamilyInput: {
+    flex: 1,
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: dogThemeColors.cardBg,
+  },
+  enhancedAddFamilyButton: {
+    padding: 12,
+    marginLeft: 10,
+    borderRadius: 8,
+    backgroundColor: dogThemeColors.lightAccent,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  addNoteContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  enhancedAddNoteInput: {
+    flex: 1,
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginRight: 10,
+    textAlignVertical: "top",
+    backgroundColor: dogThemeColors.cardBg,
+  },
+  enhancedAddNoteButton: {
+    backgroundColor: dogThemeColors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  notesContainer: {
+    marginTop: 8,
+  },
+  enhancedNoteItem: {
+    backgroundColor: dogThemeColors.lightAccent,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    position: "relative",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  noteHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  enhancedNoteAuthor: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: dogThemeColors.primary,
+  },
+  enhancedNoteTimestamp: {
+    fontSize: 12,
+    color: dogThemeColors.mediumText,
+  },
+  enhancedNoteText: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    lineHeight: 24,
+  },
+  enhancedNoteEdited: {
+    fontSize: 12,
+    color: dogThemeColors.mediumText,
+    fontStyle: "italic",
+    marginTop: 6,
+  },
+  noteEditIcon: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    padding: 4,
+  },
+  noteEditContainer: {
+    marginTop: 8,
+  },
+  enhancedNoteEditInput: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+    textAlignVertical: "top",
+    backgroundColor: "#fff",
+  },
+  noteEditActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  noteEditButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  enhancedNoNotesText: {
+    fontSize: 16,
+    color: dogThemeColors.mediumText,
+    textAlign: "center",
+    fontStyle: "italic",
+    paddingVertical: 10,
+  },
+  notesLoader: {
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  enhancedNoteInput: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    textAlignVertical: "top",
+    backgroundColor: dogThemeColors.cardBg,
+    minHeight: 80,
+  },
+  enhancedModalContainer: {
+    flex: 1,
+    backgroundColor: dogThemeColors.light,
+  },
+  enhancedModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 2,
+    borderBottomColor: dogThemeColors.lightAccent,
+    backgroundColor: dogThemeColors.cardBg,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  enhancedModalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: dogThemeColors.darkText,
+  },
+  enhancedModalSave: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: dogThemeColors.primary,
+  },
+  enhancedModalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  enhancedModalSection: {
+    marginBottom: 24,
+  },
+  enhancedModalLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: dogThemeColors.darkText,
+    marginBottom: 10,
+  },
+  enhancedModalInput: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: dogThemeColors.cardBg,
+  },
+  modalInputMarginTop: {
+    marginTop: 8,
+  },
+  enhancedModalPickerInput: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: dogThemeColors.cardBg,
+  },
+  quickNoteOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(139, 69, 19, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  enhancedQuickNoteModal: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+    borderWidth: 3,
+    borderColor: dogThemeColors.accent,
+  },
+  quickNoteHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  enhancedQuickNoteTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: dogThemeColors.darkText,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  enhancedQuickNoteInput: {
+    fontSize: 16,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 20,
+    textAlignVertical: "top",
+    minHeight: 120,
+    backgroundColor: dogThemeColors.light,
+  },
+  quickNoteActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  enhancedQuickNoteCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    marginRight: 10,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: dogThemeColors.lightAccent,
+    backgroundColor: dogThemeColors.lightAccent,
+  },
+  quickNoteCancelText: {
+    fontSize: 16,
+    color: dogThemeColors.mediumText,
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  enhancedQuickNoteSave: {
+    flex: 1,
+    paddingVertical: 14,
+    marginLeft: 10,
+    borderRadius: 10,
+    backgroundColor: dogThemeColors.primary,
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  enhancedQuickNoteSaveText: {
+    fontSize: 16,
+    color: dogThemeColors.light,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  noteModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(139, 69, 19, 0.3)",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  noteModalContainer: {
+    backgroundColor: dogThemeColors.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    width: "80%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 3,
+    borderColor: dogThemeColors.accent,
+  },
+  noteModalTitle: {
+    fontWeight: "bold", 
+    marginBottom: 16, 
+    fontSize: 18, 
+    color: dogThemeColors.darkText,
+    textAlign: "center",
+  },
+  noteModalInput: {
+    borderWidth: 2, 
+    borderColor: dogThemeColors.accent, 
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 80,
+    fontSize: 16,
+    backgroundColor: dogThemeColors.light,
+    color: dogThemeColors.darkText,
+    textAlignVertical: "top",
+  },
+  noteModalActions: {
+    flexDirection: "row", 
+    marginTop: 20,
+    justifyContent: "space-between"
+  },
+  noteModalCancel: {
+    flex: 1,
+    marginRight: 16,
+    paddingVertical: 12, 
+    paddingHorizontal: 16, 
+    borderRadius: 10,
+    backgroundColor: dogThemeColors.lightAccent,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  noteModalCancelText: {
+    color: dogThemeColors.mediumText,
+    fontWeight: "600",
+    fontSize: 16,
+    textAlign: "center",
+  },
+  noteModalSave: {
+    flex: 1,
+    backgroundColor: dogThemeColors.primary,
+    paddingVertical: 12, 
+    paddingHorizontal: 20, 
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  noteModalSaveText: {
+    color: dogThemeColors.light, 
+    fontWeight: "600",
+    fontSize: 16,
+    textAlign: "center",
+  },
+  setupContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+    backgroundColor: dogThemeColors.light,
+  },
+  welcomeTitle: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: dogThemeColors.darkText,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  setupText: {
+    fontSize: 18,
+    color: dogThemeColors.mediumText,
+    textAlign: "center",
+    marginBottom: 12,
+    lineHeight: 26,
+  },
+  setupSubtext: {
+    fontSize: 16,
+    color: dogThemeColors.mediumText,
+    textAlign: "center",
+    marginBottom: 32,
+    lineHeight: 22,
+    paddingHorizontal: 16,
+  },
+  setupInput: {
+    width: "100%",
+    fontSize: 18,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 16,
+    backgroundColor: dogThemeColors.cardBg,
+  },
+  disabledInput: {
+    backgroundColor: dogThemeColors.lightAccent,
+    color: dogThemeColors.mediumText,
+    opacity: 0.7,
+  },
+  setupButton: {
+    width: "100%",
+    backgroundColor: dogThemeColors.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    shadowColor: dogThemeColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  setupButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: dogThemeColors.light,
+  },
+  pickerInput: {
+    fontSize: 18,
+    color: dogThemeColors.darkText,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 16,
+    backgroundColor: dogThemeColors.cardBg,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: dogThemeColors.light,
+  },
+  loadingText: {
+    fontSize: 18,
+    color: dogThemeColors.mediumText,
+    marginTop: 12,
+  },
+  syncIndicator: {
+    position: "absolute",
+    bottom: 100,
+    right: 20,
+    backgroundColor: dogThemeColors.primary,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  syncText: {
+    color: dogThemeColors.light,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  offlineBanner: {
+    backgroundColor: dogThemeColors.warning,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#FF4444",
+  },
+  offlineText: {
+    color: "#fff",
+    fontSize: 16,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+    backgroundColor: dogThemeColors.light,
+  },
+  errorTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: dogThemeColors.darkText,
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  errorText: {
+    fontSize: 18,
+    color: dogThemeColors.mediumText,
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 26,
+  },
+  errorButton: {
+    backgroundColor: dogThemeColors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+  },
+  errorButtonText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: dogThemeColors.light,
+  },
+  weekNavigation: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  weekNavButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: dogThemeColors.lightAccent,
+    borderWidth: 2,
+    borderColor: dogThemeColors.accent,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  weekNavDisabled: {
+    opacity: 0.5,
+  },
+  weekNavText: {
+    fontSize: 14,
+    color: dogThemeColors.primary,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  weekTitleContainer: {
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 16,
+  },
+  weekTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: dogThemeColors.darkText,
+    textAlign: "center",
+  },
+});
