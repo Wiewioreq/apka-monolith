@@ -1,0 +1,29 @@
+# Node.js dependencies
+/node_modules
+
+# Expo-specific cache and temporary files
+/.expo/
+/dist/
+
+# Log files
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+*.log
+
+# Environment variables (contains secrets!)
+.env
+.env.*
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# IDE configuration folders
+.idea/
+.vscode/
+
+# Android build outputs (these are generated during the build process, not needed in source)
+/android/build/
+/android/app/build/
+/android/.gradle/
